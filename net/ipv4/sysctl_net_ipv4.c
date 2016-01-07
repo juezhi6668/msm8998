@@ -368,13 +368,6 @@ static struct ctl_table ipv4_table[] = {
 		.proc_handler	= proc_dointvec
 	},
 	{
-		.procname	= "tcp_keepalive_time",
-		.data		= &sysctl_tcp_keepalive_time,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec_jiffies,
-	},
-	{
 		.procname	= "tcp_keepalive_probes",
 		.data		= &sysctl_tcp_keepalive_probes,
 		.maxlen		= sizeof(int),
@@ -1024,6 +1017,13 @@ static struct ctl_table ipv4_net_table[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec
+	},
+	{
+		.procname	= "tcp_keepalive_time",
+		.data		= &init_net.ipv4.sysctl_tcp_keepalive_time,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_jiffies,
 	},
 	{ }
 };
