@@ -471,9 +471,9 @@ long ext4_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 		flags = ext4_mask_flags(inode->i_mode, flags);
 
-		mutex_lock(&inode->i_mutex);
+		inode_lock(inode);
 		err = ext4_ioctl_setflags(inode, flags);
-		mutex_unlock(&inode->i_mutex);
+		inode_unlock(inode);
 		mnt_drop_write_file(filp);
 		return err;
 	}
@@ -504,7 +504,7 @@ long ext4_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			goto setversion_out;
 		}
 
-		mutex_lock(&inode->i_mutex);
+		inode_lock(inode);
 		handle = ext4_journal_start(inode, EXT4_HT_INODE, 1);
 		if (IS_ERR(handle)) {
 			err = PTR_ERR(handle);
@@ -519,7 +519,7 @@ long ext4_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		ext4_journal_stop(handle);
 
 unlock_out:
-		mutex_unlock(&inode->i_mutex);
+		inode_unlock(inode);
 setversion_out:
 		mnt_drop_write_file(filp);
 		return err;
@@ -665,9 +665,9 @@ group_add_out:
 		 * ext4_ext_swap_inode_data before we switch the
 		 * inode format to prevent read.
 		 */
-		mutex_lock(&(inode->i_mutex));
+		inode_lock((inode));
 		err = ext4_ext_migrate(inode);
-		mutex_unlock(&(inode->i_mutex));
+		inode_unlock((inode));
 		mnt_drop_write_file(filp);
 		return err;
 	}
@@ -798,11 +798,11 @@ resizefs_out:
 		if (err)
 			goto encryption_policy_out;
 
-		mutex_lock(&inode->i_mutex);
+		inode_lock(inode);
 
 		err = ext4_process_policy(&policy, inode);
 
-		mutex_unlock(&inode->i_mutex);
+		inode_unlock(inode);
 
 		mnt_drop_write_file(filp);
 encryption_policy_out:

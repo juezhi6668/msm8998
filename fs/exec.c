@@ -1357,14 +1357,14 @@ static void bprm_fill_uid(struct linux_binprm *bprm)
 		return;
 
 	/* Be careful if suid/sgid is set */
-	mutex_lock(&inode->i_mutex);
+	inode_lock(inode);
 
 	/* Atomically reload and check mode/uid/gid now that lock held. */
 	mode = inode->i_mode;
 	uid = inode->i_uid;
 	gid = inode->i_gid;
 	err = inode_permission(inode, MAY_EXEC);
-	mutex_unlock(&inode->i_mutex);
+	inode_unlock(inode);
 
 	/* Did the exec bit vanish out from under us? Give up. */
 	if (err)
