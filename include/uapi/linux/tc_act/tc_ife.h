@@ -23,7 +23,10 @@ enum {
 	TCA_IFE_SMAC,
 	TCA_IFE_TYPE,
 	TCA_IFE_METALST,
+<<<<<<< HEAD
 	TCA_IFE_PAD,
+=======
+>>>>>>> ef6980b6becb... introduce IFE action
 	__TCA_IFE_MAX
 };
 #define TCA_IFE_MAX (__TCA_IFE_MAX - 1)

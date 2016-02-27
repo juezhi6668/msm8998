@@ -108,7 +108,11 @@ EXPORT_SYMBOL_GPL(ife_get_meta_u16);
 
 int ife_alloc_meta_u32(struct tcf_meta_info *mi, void *metaval)
 {
+<<<<<<< HEAD
 	mi->metaval = kmemdup(metaval, sizeof(u32), GFP_KERNEL);
+=======
+	mi->metaval = kmemdup(&metaval, sizeof(u32), GFP_KERNEL);
+>>>>>>> ef6980b6becb... introduce IFE action
 	if (!mi->metaval)
 		return -ENOMEM;
 
@@ -118,7 +122,11 @@ EXPORT_SYMBOL_GPL(ife_alloc_meta_u32);
 
 int ife_alloc_meta_u16(struct tcf_meta_info *mi, void *metaval)
 {
+<<<<<<< HEAD
 	mi->metaval = kmemdup(metaval, sizeof(u16), GFP_KERNEL);
+=======
+	mi->metaval = kmemdup(&metaval, sizeof(u16), GFP_KERNEL);
+>>>>>>> ef6980b6becb... introduce IFE action
 	if (!mi->metaval)
 		return -ENOMEM;
 
@@ -550,7 +558,11 @@ static int tcf_ife_dump(struct sk_buff *skb, struct tc_action *a, int bind,
 	t.install = jiffies_to_clock_t(jiffies - ife->tcf_tm.install);
 	t.lastuse = jiffies_to_clock_t(jiffies - ife->tcf_tm.lastuse);
 	t.expires = jiffies_to_clock_t(ife->tcf_tm.expires);
+<<<<<<< HEAD
 	if (nla_put_64bit(skb, TCA_IFE_TM, sizeof(t), &t, TCA_IFE_PAD))
+=======
+	if (nla_put(skb, TCA_IFE_TM, sizeof(t), &t))
+>>>>>>> ef6980b6becb... introduce IFE action
 		goto nla_put_failure;
 
 	if (!is_zero_ether_addr(ife->eth_dst)) {
