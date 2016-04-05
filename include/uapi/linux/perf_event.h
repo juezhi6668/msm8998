@@ -339,6 +339,7 @@ struct perf_event_attr {
 				context_switch :  1, /* context switch data */
 				constraint_duplicate : 1,
 
+				write_backward :  1, /* Write ring buffer from end to beginning */
 				__reserved_1   : 36;
 
 	union {
