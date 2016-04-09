@@ -1611,8 +1611,6 @@ enum netdev_priv_flags {
  *	@gso_max_size:	Maximum size of generic segmentation offload
  *	@gso_max_segs:	Maximum number of segments that can be passed to the
  *			NIC for GSO
- *	@gso_min_segs:	Minimum number of segments that can be passed to the
- *			NIC for GSO
  *
  *	@dcbnl_ops:	Data Center Bridging netlink ops
  *	@num_tc:	Number of traffic classes in the net device
@@ -1891,7 +1889,7 @@ struct net_device {
 	unsigned int		gso_max_size;
 #define GSO_MAX_SEGS		65535
 	u16			gso_max_segs;
-	u16			gso_min_segs;
+
 #ifdef CONFIG_DCB
 	const struct dcbnl_rtnl_ops *dcbnl_ops;
 #endif
