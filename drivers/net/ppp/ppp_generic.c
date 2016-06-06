@@ -1129,6 +1129,8 @@ ppp_get_stats64(struct net_device *dev, struct rtnl_link_stats64 *stats64)
 }
 
 static struct lock_class_key ppp_tx_busylock;
+static struct lock_class_key ppp_qdisc_running_key;
+
 static int ppp_dev_init(struct net_device *dev)
 {
 	struct ppp *ppp;
@@ -1142,6 +1144,7 @@ static int ppp_dev_init(struct net_device *dev)
 	 */
 	atomic_inc(&ppp->file.refcnt);
 
+	dev->qdisc_running_key = &ppp_qdisc_running_key;
 	return 0;
 }
 

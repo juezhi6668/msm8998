@@ -1885,9 +1885,10 @@ struct net_device {
 #if IS_ENABLED(CONFIG_CGROUP_NET_PRIO)
 	struct netprio_map __rcu *priomap;
 #endif
-	struct phy_device *phydev;
-	struct lock_class_key *qdisc_tx_busylock;
-	bool proto_down;
+	struct phy_device	*phydev;
+	struct lock_class_key	*qdisc_tx_busylock;
+	struct lock_class_key	*qdisc_running_key;
+	bool			proto_down;
 };
 #define to_net_dev(d) container_of(d, struct net_device, dev)
 
