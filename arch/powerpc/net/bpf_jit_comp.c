@@ -16,7 +16,7 @@
 #include <linux/filter.h>
 #include <linux/if_vlan.h>
 
-#include "bpf_jit.h"
+#include "bpf_jit32.h"
 
 static inline void bpf_flush_icache(void *start, void *end)
 {
