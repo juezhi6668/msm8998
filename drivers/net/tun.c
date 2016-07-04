@@ -1441,12 +1441,13 @@ static struct sk_buff *tun_ring_recv(struct tun_file *tfile, int noblock,
 {
 	DECLARE_WAITQUEUE(wait, current);
 	struct sk_buff *skb = NULL;
+	int error = 0;
 
 	skb = skb_array_consume(&tfile->tx_array);
 	if (skb)
 		goto out;
 	if (noblock) {
-		*err = -EAGAIN;
+		error = -EAGAIN;
 		goto out;
 	}
 
@@ -1458,11 +1459,11 @@ static struct sk_buff *tun_ring_recv(struct tun_file *tfile, int noblock,
 		if (skb)
 			break;
 		if (signal_pending(current)) {
-			*err = -ERESTARTSYS;
+			error = -ERESTARTSYS;
 			break;
 		}
 		if (tfile->socket.sk->sk_shutdown & RCV_SHUTDOWN) {
-			*err = -EFAULT;
+			error = -EFAULT;
 			break;
 		}
 
@@ -1473,6 +1474,7 @@ static struct sk_buff *tun_ring_recv(struct tun_file *tfile, int noblock,
 	remove_wait_queue(&tfile->wq.wait, &wait);
 
 out:
+	*err = error;
 	return skb;
 }
 
