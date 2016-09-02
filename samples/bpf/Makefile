@@ -25,6 +25,7 @@ hostprogs-y += test_cgrp2_attach
 hostprogs-y += xdp1
 hostprogs-y += xdp2
 hostprogs-y += test_current_task_under_cgroup
+hostprogs-y += trace_event
 
 test_verifier-objs := test_verifier.o libbpf.o
 test_maps-objs := test_maps.o libbpf.o
@@ -52,6 +53,7 @@ xdp1-objs := bpf_load.o libbpf.o xdp1_user.o
 xdp2-objs := bpf_load.o libbpf.o xdp1_user.o
 test_current_task_under_cgroup-objs := bpf_load.o libbpf.o \
 				       test_current_task_under_cgroup_user.o
+trace_event-objs := bpf_load.o libbpf.o trace_event_user.o
 
 # Tell kbuild to always build the programs
 always := $(hostprogs-y)
@@ -78,6 +80,7 @@ always += test_cgrp2_tc_kern.o
 always += xdp1_kern.o
 always += xdp2_kern.o
 always += test_current_task_under_cgroup_kern.o
+always += trace_event_kern.o
 
 HOSTCFLAGS += -I$(objtree)/usr/include
 
@@ -101,6 +104,7 @@ HOSTLOADLIBES_test_overhead += -lelf -lrt
 HOSTLOADLIBES_xdp1 += -lelf
 HOSTLOADLIBES_xdp2 += -lelf
 HOSTLOADLIBES_test_current_task_under_cgroup += -lelf
+HOSTLOADLIBES_trace_event += -lelf
 
 # point this to your LLVM backend with bpf support
 LLC=$(srctree)/tools/bpf/llvm/bld/Debug+Asserts/bin/llc
