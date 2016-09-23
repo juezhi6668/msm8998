@@ -18,11 +18,15 @@
 #include <linux/if_vlan.h>
 #include <asm/kprobes.h>
 <<<<<<< HEAD
+<<<<<<< HEAD
 #include <linux/bpf.h>
 
 #include "bpf_jit64.h"
 
 =======
+=======
+#include <linux/bpf.h>
+>>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
 
 #include "bpf_jit64.h"
 
@@ -118,6 +122,7 @@ static void bpf_jit_emit_skb_loads(u32 *image, struct codegen_context *ctx)
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 static void bpf_jit_build_prologue(u32 *image, struct codegen_context *ctx)
 {
 	int i;
@@ -141,33 +146,34 @@ static void bpf_jit_build_prologue(u32 *image, struct codegen_context *ctx)
 	if (bpf_has_stack_frame(ctx)) {
 =======
 static void bpf_jit_emit_func_call(u32 *image, struct codegen_context *ctx, u64 func)
+=======
+static void bpf_jit_build_prologue(u32 *image, struct codegen_context *ctx)
+>>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
 {
-#ifdef PPC64_ELF_ABI_v1
-	/* func points to the function descriptor */
-	PPC_LI64(b2p[TMP_REG_2], func);
-	/* Load actual entry point from function descriptor */
-	PPC_BPF_LL(b2p[TMP_REG_1], b2p[TMP_REG_2], 0);
-	/* ... and move it to LR */
-	PPC_MTLR(b2p[TMP_REG_1]);
-	/*
-	 * Load TOC from function descriptor at offset 8.
-	 * We can clobber r2 since we get called through a
-	 * function pointer (so caller will save/restore r2)
-	 * and since we don't use a TOC ourself.
-	 */
-	PPC_BPF_LL(2, b2p[TMP_REG_2], 8);
-#else
-	/* We can clobber r12 */
-	PPC_FUNC_ADDR(12, func);
-	PPC_MTLR(12);
-#endif
-	PPC_BLRL();
-}
+	int i;
 
+	/*
+	 * Initialize tail_call_cnt if we do tail calls.
+	 * Otherwise, put in NOPs so that it can be skipped when we are
+	 * invoked through a tail call.
+	 */
+	if (ctx->seen & SEEN_TAILCALL) {
+		PPC_LI(b2p[TMP_REG_1], 0);
+		/* this goes in the redzone */
+		PPC_BPF_STL(b2p[TMP_REG_1], 1, -(BPF_PPC_STACK_SAVE + 8));
+	} else {
+		PPC_NOP();
+		PPC_NOP();
+	}
+
+<<<<<<< HEAD
 static void bpf_jit_build_prologue(u32 *image, struct codegen_context *ctx)
 {
 	int i;
 	bool new_stack_frame = bpf_has_stack_frame(ctx);
+=======
+#define BPF_TAILCALL_PROLOGUE_SIZE	8
+>>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
 
 	if (new_stack_frame) {
 >>>>>>> 156d0e290e96... powerpc/ebpf/jit: Implement JIT compiler for extended BPF
@@ -224,6 +230,7 @@ static void bpf_jit_build_prologue(u32 *image, struct codegen_context *ctx)
 }
 
 static void bpf_jit_emit_common_epilogue(u32 *image, struct codegen_context *ctx)
+<<<<<<< HEAD
 {
 	int i;
 =======
@@ -231,14 +238,19 @@ static void bpf_jit_emit_common_epilogue(u32 *image, struct codegen_context *ctx
 }
 
 static void bpf_jit_build_epilogue(u32 *image, struct codegen_context *ctx)
+=======
+>>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
 {
 	int i;
 	bool new_stack_frame = bpf_has_stack_frame(ctx);
 
+<<<<<<< HEAD
 	/* Move result to r3 */
 	PPC_MR(3, b2p[BPF_REG_0]);
 >>>>>>> 156d0e290e96... powerpc/ebpf/jit: Implement JIT compiler for extended BPF
 
+=======
+>>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
 	/* Restore NVRs */
 	for (i = BPF_REG_6; i <= BPF_REG_10; i++)
 		if (bpf_is_seen_register(ctx, i))
@@ -277,6 +289,9 @@ static void bpf_jit_build_epilogue(u32 *image, struct codegen_context *ctx)
 		}
 	}
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
 }
 
 static void bpf_jit_build_epilogue(u32 *image, struct codegen_context *ctx)
@@ -285,12 +300,16 @@ static void bpf_jit_build_epilogue(u32 *image, struct codegen_context *ctx)
 
 	/* Move result to r3 */
 	PPC_MR(3, b2p[BPF_REG_0]);
+<<<<<<< HEAD
 =======
 >>>>>>> 156d0e290e96... powerpc/ebpf/jit: Implement JIT compiler for extended BPF
+=======
+>>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
 
 	PPC_BLR();
 }
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 static void bpf_jit_emit_func_call(u32 *image, struct codegen_context *ctx, u64 func)
 {
@@ -313,12 +332,24 @@ static void bpf_jit_emit_func_call(u32 *image, struct codegen_context *ctx, u64 
 		PPC_NOP();
 
 #ifdef PPC64_ELF_ABI_v1
+=======
+static void bpf_jit_emit_func_call(u32 *image, struct codegen_context *ctx, u64 func)
+{
+#ifdef PPC64_ELF_ABI_v1
+	/* func points to the function descriptor */
+	PPC_LI64(b2p[TMP_REG_2], func);
+	/* Load actual entry point from function descriptor */
+	PPC_BPF_LL(b2p[TMP_REG_1], b2p[TMP_REG_2], 0);
+	/* ... and move it to LR */
+	PPC_MTLR(b2p[TMP_REG_1]);
+>>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
 	/*
 	 * Load TOC from function descriptor at offset 8.
 	 * We can clobber r2 since we get called through a
 	 * function pointer (so caller will save/restore r2)
 	 * and since we don't use a TOC ourself.
 	 */
+<<<<<<< HEAD
 	PPC_BPF_LL(2, 12, 8);
 	/* Load actual entry point from function descriptor */
 	PPC_BPF_LL(12, 12, 0);
@@ -329,6 +360,18 @@ static void bpf_jit_emit_func_call(u32 *image, struct codegen_context *ctx, u64 
 }
 
 static int bpf_jit_emit_tail_call(u32 *image, struct codegen_context *ctx, u32 out)
+=======
+	PPC_BPF_LL(2, b2p[TMP_REG_2], 8);
+#else
+	/* We can clobber r12 */
+	PPC_FUNC_ADDR(12, func);
+	PPC_MTLR(12);
+#endif
+	PPC_BLRL();
+}
+
+static void bpf_jit_emit_tail_call(u32 *image, struct codegen_context *ctx, u32 out)
+>>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
 {
 	/*
 	 * By now, the eBPF program has already setup parameters in r3, r4 and r5
@@ -344,7 +387,10 @@ static int bpf_jit_emit_tail_call(u32 *image, struct codegen_context *ctx, u32 o
 	 *   goto out;
 	 */
 	PPC_LWZ(b2p[TMP_REG_1], b2p_bpf_array, offsetof(struct bpf_array, map.max_entries));
+<<<<<<< HEAD
 	PPC_RLWINM(b2p_index, b2p_index, 0, 0, 31);
+=======
+>>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
 	PPC_CMPLW(b2p_index, b2p[TMP_REG_1]);
 	PPC_BCC(COND_GE, out);
 
@@ -352,7 +398,11 @@ static int bpf_jit_emit_tail_call(u32 *image, struct codegen_context *ctx, u32 o
 	 * if (tail_call_cnt > MAX_TAIL_CALL_CNT)
 	 *   goto out;
 	 */
+<<<<<<< HEAD
 	PPC_BPF_LL(b2p[TMP_REG_1], 1, bpf_jit_stack_tailcallcnt(ctx));
+=======
+	PPC_LD(b2p[TMP_REG_1], 1, bpf_jit_stack_tailcallcnt(ctx));
+>>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
 	PPC_CMPLWI(b2p[TMP_REG_1], MAX_TAIL_CALL_CNT);
 	PPC_BCC(COND_GT, out);
 
@@ -365,7 +415,11 @@ static int bpf_jit_emit_tail_call(u32 *image, struct codegen_context *ctx, u32 o
 	/* prog = array->ptrs[index]; */
 	PPC_MULI(b2p[TMP_REG_1], b2p_index, 8);
 	PPC_ADD(b2p[TMP_REG_1], b2p[TMP_REG_1], b2p_bpf_array);
+<<<<<<< HEAD
 	PPC_BPF_LL(b2p[TMP_REG_1], b2p[TMP_REG_1], offsetof(struct bpf_array, ptrs));
+=======
+	PPC_LD(b2p[TMP_REG_1], b2p[TMP_REG_1], offsetof(struct bpf_array, ptrs));
+>>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
 
 	/*
 	 * if (prog == NULL)
@@ -375,7 +429,11 @@ static int bpf_jit_emit_tail_call(u32 *image, struct codegen_context *ctx, u32 o
 	PPC_BCC(COND_EQ, out);
 
 	/* goto *(prog->bpf_func + prologue_size); */
+<<<<<<< HEAD
 	PPC_BPF_LL(b2p[TMP_REG_1], b2p[TMP_REG_1], offsetof(struct bpf_prog, bpf_func));
+=======
+	PPC_LD(b2p[TMP_REG_1], b2p[TMP_REG_1], offsetof(struct bpf_prog, bpf_func));
+>>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
 #ifdef PPC64_ELF_ABI_v1
 	/* skip past the function descriptor */
 	PPC_ADDI(b2p[TMP_REG_1], b2p[TMP_REG_1],
@@ -389,6 +447,7 @@ static int bpf_jit_emit_tail_call(u32 *image, struct codegen_context *ctx, u32 o
 	bpf_jit_emit_common_epilogue(image, ctx);
 
 	PPC_BCTR();
+<<<<<<< HEAD
 
 	/* out: */
 	return 0;
@@ -396,6 +455,11 @@ static int bpf_jit_emit_tail_call(u32 *image, struct codegen_context *ctx, u32 o
 
 =======
 >>>>>>> 156d0e290e96... powerpc/ebpf/jit: Implement JIT compiler for extended BPF
+=======
+	/* out: */
+}
+
+>>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
 /* Assemble the body code between the prologue & epilogue */
 static int bpf_jit_build_body(struct bpf_prog *fp, u32 *image,
 			      struct codegen_context *ctx,
@@ -1161,6 +1225,7 @@ common_load:
 
 		/*
 <<<<<<< HEAD
+<<<<<<< HEAD
 		 * Tail call
 		 */
 		case BPF_JMP | BPF_TAIL_CALL:
@@ -1174,6 +1239,14 @@ common_load:
 		 */
 		case BPF_JMP | BPF_CALL | BPF_X:
 >>>>>>> 156d0e290e96... powerpc/ebpf/jit: Implement JIT compiler for extended BPF
+=======
+		 * Tail call
+		 */
+		case BPF_JMP | BPF_CALL | BPF_X:
+			ctx->seen |= SEEN_TAILCALL;
+			bpf_jit_emit_tail_call(image, ctx, addrs[i + 1]);
+			break;
+>>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
 
 		default:
 			/*
