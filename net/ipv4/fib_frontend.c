@@ -187,7 +187,7 @@ static void fib_flush(struct net *net)
 		struct fib_table *tb;
 
 		hlist_for_each_entry_safe(tb, tmp, head, tb_hlist)
-			flushed += fib_table_flush(tb, false);
+			flushed += fib_table_flush(net, tb, false);
 	}
 
 	if (flushed)
@@ -599,13 +599,13 @@ int ip_rt_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 			if (cmd == SIOCDELRT) {
 				tb = fib_get_table(net, cfg.fc_table);
 				if (tb)
-					err = fib_table_delete(tb, &cfg);
+					err = fib_table_delete(net, tb, &cfg);
 				else
 					err = -ESRCH;
 			} else {
 				tb = fib_new_table(net, cfg.fc_table);
 				if (tb)
-					err = fib_table_insert(tb, &cfg);
+					err = fib_table_insert(net, tb, &cfg);
 				else
 					err = -ENOBUFS;
 			}
@@ -729,7 +729,7 @@ static int inet_rtm_delroute(struct sk_buff *skb, struct nlmsghdr *nlh)
 		goto errout;
 	}
 
-	err = fib_table_delete(tb, &cfg);
+	err = fib_table_delete(net, tb, &cfg);
 errout:
 	return err;
 }
@@ -751,7 +751,7 @@ static int inet_rtm_newroute(struct sk_buff *skb, struct nlmsghdr *nlh)
 		goto errout;
 	}
 
-	err = fib_table_insert(tb, &cfg);
+	err = fib_table_insert(net, tb, &cfg);
 errout:
 	return err;
 }
@@ -845,9 +845,9 @@ static void fib_magic(int cmd, int type, __be32 dst, int dst_len, struct in_ifad
 		cfg.fc_scope = RT_SCOPE_HOST;
 
 	if (cmd == RTM_NEWROUTE)
-		fib_table_insert(tb, &cfg);
+		fib_table_insert(net, tb, &cfg);
 	else
-		fib_table_delete(tb, &cfg);
+		fib_table_delete(net, tb, &cfg);
 }
 
 void fib_add_ifaddr(struct in_ifaddr *ifa)
@@ -1282,7 +1282,7 @@ static void ip_fib_net_exit(struct net *net)
 
 		hlist_for_each_entry_safe(tb, tmp, head, tb_hlist) {
 			hlist_del(&tb->tb_hlist);
-			fib_table_flush(tb, true);
+			fib_table_flush(net, tb, true);
 			fib_free_table(tb);
 		}
 	}
