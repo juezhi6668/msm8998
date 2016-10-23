@@ -863,6 +863,7 @@ struct sk_buff_fclones {
 
 /**
  *	skb_fclone_busy - check if fclone is busy
+ *	@sk: socket
  *	@skb: buffer
  *
  * Returns true is skb is a fast clone, and its clone is not freed.
