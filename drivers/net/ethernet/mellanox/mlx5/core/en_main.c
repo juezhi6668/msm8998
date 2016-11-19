@@ -328,11 +328,90 @@ static int mlx5e_create_rq(struct mlx5e_channel *c,
 	rq->wq.db = &rq->wq.db[MLX5_RCV_DBR];
 
 	wq_sz = mlx5_wq_ll_get_size(&rq->wq);
+<<<<<<< HEAD
 	rq->skb = kzalloc_node(wq_sz * sizeof(*rq->skb), GFP_KERNEL,
 			       cpu_to_node(c->cpu));
 	if (!rq->skb) {
 		err = -ENOMEM;
 		goto err_rq_wq_destroy;
+=======
+
+	rq->wq_type = priv->params.rq_wq_type;
+	rq->pdev    = c->pdev;
+	rq->netdev  = c->netdev;
+	rq->tstamp  = &priv->tstamp;
+	rq->channel = c;
+	rq->ix      = c->ix;
+	rq->priv    = c->priv;
+
+	rq->xdp_prog = priv->xdp_prog ? bpf_prog_inc(priv->xdp_prog) : NULL;
+	if (IS_ERR(rq->xdp_prog)) {
+		err = PTR_ERR(rq->xdp_prog);
+		rq->xdp_prog = NULL;
+		goto err_rq_wq_destroy;
+	}
+
+	rq->buff.map_dir = DMA_FROM_DEVICE;
+	if (rq->xdp_prog)
+		rq->buff.map_dir = DMA_BIDIRECTIONAL;
+
+	switch (priv->params.rq_wq_type) {
+	case MLX5_WQ_TYPE_LINKED_LIST_STRIDING_RQ:
+		if (mlx5e_is_vf_vport_rep(priv)) {
+			err = -EINVAL;
+			goto err_rq_wq_destroy;
+		}
+
+		rq->handle_rx_cqe = mlx5e_handle_rx_cqe_mpwrq;
+		rq->alloc_wqe = mlx5e_alloc_rx_mpwqe;
+		rq->dealloc_wqe = mlx5e_dealloc_rx_mpwqe;
+
+		rq->mpwqe.mtt_offset = c->ix *
+			MLX5E_REQUIRED_MTTS(1, BIT(priv->params.log_rq_size));
+
+		rq->mpwqe_stride_sz = BIT(priv->params.mpwqe_log_stride_sz);
+		rq->mpwqe_num_strides = BIT(priv->params.mpwqe_log_num_strides);
+
+		rq->buff.wqe_sz = rq->mpwqe_stride_sz * rq->mpwqe_num_strides;
+		byte_count = rq->buff.wqe_sz;
+		rq->mkey_be = cpu_to_be32(c->priv->umr_mkey.key);
+		err = mlx5e_rq_alloc_mpwqe_info(rq, c);
+		if (err)
+			goto err_rq_wq_destroy;
+		break;
+	default: /* MLX5_WQ_TYPE_LINKED_LIST */
+		rq->dma_info = kzalloc_node(wq_sz * sizeof(*rq->dma_info),
+					    GFP_KERNEL, cpu_to_node(c->cpu));
+		if (!rq->dma_info) {
+			err = -ENOMEM;
+			goto err_rq_wq_destroy;
+		}
+
+		if (mlx5e_is_vf_vport_rep(priv))
+			rq->handle_rx_cqe = mlx5e_handle_rx_cqe_rep;
+		else
+			rq->handle_rx_cqe = mlx5e_handle_rx_cqe;
+
+		rq->alloc_wqe = mlx5e_alloc_rx_wqe;
+		rq->dealloc_wqe = mlx5e_dealloc_rx_wqe;
+
+		rq->buff.wqe_sz = (priv->params.lro_en) ?
+				priv->params.lro_wqe_sz :
+				MLX5E_SW2HW_MTU(priv->netdev->mtu);
+		byte_count = rq->buff.wqe_sz;
+
+		/* calc the required page order */
+		frag_sz = MLX5_RX_HEADROOM +
+			  byte_count /* packet data */ +
+			  SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+		frag_sz = SKB_DATA_ALIGN(frag_sz);
+
+		npages = DIV_ROUND_UP(frag_sz, PAGE_SIZE);
+		rq->buff.page_order = order_base_2(npages);
+
+		byte_count |= MLX5_HW_START_PADDING;
+		rq->mkey_be = c->mkey_be;
+>>>>>>> cac6cd97da5e... UPSTREAM: bpf, mlx5: fix mlx5e_create_rq taking reference on prog
 	}
 
 	rq->wqe_sz = (priv->params.lro_en) ? priv->params.lro_wqe_sz :
@@ -357,6 +436,8 @@ static int mlx5e_create_rq(struct mlx5e_channel *c,
 	return 0;
 
 err_rq_wq_destroy:
+	if (rq->xdp_prog)
+		bpf_prog_put(rq->xdp_prog);
 	mlx5_wq_destroy(&rq->wq_ctrl);
 
 	return err;
