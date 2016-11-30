@@ -28,6 +28,7 @@ hostprogs-y += test_current_task_under_cgroup
 hostprogs-y += trace_event
 hostprogs-y += sampleip
 hostprogs-y += tc_l2_redirect
+hostprogs-y += lwt_len_hist
 
 test_verifier-objs := test_verifier.o libbpf.o
 test_maps-objs := test_maps.o libbpf.o
@@ -58,6 +59,7 @@ test_current_task_under_cgroup-objs := bpf_load.o libbpf.o \
 trace_event-objs := bpf_load.o libbpf.o trace_event_user.o
 sampleip-objs := bpf_load.o libbpf.o sampleip_user.o
 tc_l2_redirect-objs := bpf_load.o libbpf.o tc_l2_redirect_user.o
+lwt_len_hist-objs := bpf_load.o libbpf.o lwt_len_hist_user.o
 
 # Tell kbuild to always build the programs
 always := $(hostprogs-y)
@@ -87,6 +89,7 @@ always += xdp2_kern.o
 always += test_current_task_under_cgroup_kern.o
 always += trace_event_kern.o
 always += sampleip_kern.o
+always += lwt_len_hist_kern.o
 
 HOSTCFLAGS += -I$(objtree)/usr/include
 
@@ -113,6 +116,7 @@ HOSTLOADLIBES_test_current_task_under_cgroup += -lelf
 HOSTLOADLIBES_trace_event += -lelf
 HOSTLOADLIBES_sampleip += -lelf
 HOSTLOADLIBES_tc_l2_redirect += -l elf
+HOSTLOADLIBES_lwt_len_hist += -l elf
 
 # point this to your LLVM backend with bpf support
 LLC=$(srctree)/tools/bpf/llvm/bld/Debug+Asserts/bin/llc
