@@ -39,6 +39,13 @@ static const char *lwtunnel_encap_str(enum lwtunnel_encap_types encap_type)
 		return "MPLS";
 	case LWTUNNEL_ENCAP_ILA:
 		return "ILA";
+<<<<<<< HEAD
+=======
+	case LWTUNNEL_ENCAP_SEG6:
+		return "SEG6";
+	case LWTUNNEL_ENCAP_BPF:
+		return "BPF";
+>>>>>>> 80cc1e3dea6c... BACKPORT: bpf: BPF for lightweight tunnel infrastructure
 	case LWTUNNEL_ENCAP_IP6:
 	case LWTUNNEL_ENCAP_IP:
 	case LWTUNNEL_ENCAP_NONE:
