@@ -2883,7 +2883,10 @@ static bool lwt_is_valid_access(int off, int size,
 	return __is_valid_access(off, size, type);
 }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 1e77230e9237... BACKPORT: bpf: Add new cgroup attach type to enable sock modifications
 static bool sock_filter_is_valid_access(int off, int size,
 					enum bpf_access_type type,
 					enum bpf_reg_type *reg_type)
@@ -2902,6 +2905,9 @@ static bool sock_filter_is_valid_access(int off, int size,
 
 	/* The verifier guarantees that size > 0. */
 	if (off % size != 0)
+		return false;
+
+	if (size != sizeof(__u32))
 		return false;
 
 	return true;
@@ -3166,7 +3172,7 @@ static u32 sk_filter_convert_ctx_access(enum bpf_access_type type, int dst_reg,
 }
 
 static u32 sock_filter_convert_ctx_access(enum bpf_access_type type,
-				  int dst_reg, int src_reg,
+					  int dst_reg, int src_reg,
 					  int ctx_off,
 					  struct bpf_insn *insn_buf,
 					  struct bpf_prog *prog)
@@ -3262,12 +3268,12 @@ static const struct bpf_verifier_ops cg_skb_ops = {
 	.convert_ctx_access	= sk_filter_convert_ctx_access,
 };
 
-<<<<<<< HEAD
 static const struct bpf_verifier_ops cg_sock_ops = {
 	.get_func_proto		= sk_filter_func_proto,
 	.is_valid_access	= sock_filter_is_valid_access,
 	.convert_ctx_access	= sock_filter_convert_ctx_access,
-=======
+};
+
 static const struct bpf_verifier_ops lwt_inout_ops = {
 	.get_func_proto		= lwt_inout_func_proto,
 	.is_valid_access	= lwt_is_valid_access,
@@ -3279,7 +3285,12 @@ static const struct bpf_verifier_ops lwt_xmit_ops = {
 	.is_valid_access	= lwt_is_valid_access,
 	.convert_ctx_access	= sk_filter_convert_ctx_access,
 	.gen_prologue		= tc_cls_act_prologue,
->>>>>>> 80cc1e3dea6c... BACKPORT: bpf: BPF for lightweight tunnel infrastructure
+};
+
+static const struct bpf_verifier_ops cg_sock_ops = {
+	.get_func_proto		= sk_filter_func_proto,
+	.is_valid_access	= sock_filter_is_valid_access,
+	.convert_ctx_access	= sock_filter_convert_ctx_access,
 };
 
 static struct bpf_prog_type_list sk_filter_type __read_mostly = {
@@ -3325,6 +3336,11 @@ static struct bpf_prog_type_list lwt_out_type __read_mostly = {
 static struct bpf_prog_type_list lwt_xmit_type __read_mostly = {
 	.ops	= &lwt_xmit_ops,
 	.type	= BPF_PROG_TYPE_LWT_XMIT,
+};
+
+static struct bpf_prog_type_list cg_sock_type __read_mostly = {
+	.ops	= &cg_sock_ops,
+	.type	= BPF_PROG_TYPE_CGROUP_SOCK
 };
 
 static int __init register_sk_filter_ops(void)
