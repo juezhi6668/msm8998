@@ -86,6 +86,24 @@ struct flow_dissector_key_addrs {
 };
 
 /**
+ * flow_dissector_key_arp:
+ *	@ports: Operation, source and target addresses for an ARP header
+ *              for Ethernet hardware addresses and IPv4 protocol addresses
+ *		sip: Sender IP address
+ *		tip: Target IP address
+ *		op:  Operation
+ *		sha: Sender hardware address
+ *		tpa: Target hardware address
+ */
+struct flow_dissector_key_arp {
+	__u32 sip;
+	__u32 tip;
+	__u8 op;
+	unsigned char sha[ETH_ALEN];
+	unsigned char tha[ETH_ALEN];
+};
+
+/**
  * flow_dissector_key_tp_ports:
  *	@ports: port numbers of Transport header
  *		src: source port number
@@ -139,6 +157,7 @@ enum flow_dissector_key_id {
 	FLOW_DISSECTOR_KEY_ETH_ADDRS, /* struct flow_dissector_key_eth_addrs */
 	FLOW_DISSECTOR_KEY_TIPC_ADDRS, /* struct flow_dissector_key_tipc_addrs */
 	FLOW_DISSECTOR_KEY_VLANID, /* struct flow_dissector_key_flow_tags */
+	FLOW_DISSECTOR_KEY_ARP, /* struct flow_dissector_key_arp */
 	FLOW_DISSECTOR_KEY_FLOW_LABEL, /* struct flow_dissector_key_flow_tags */
 	FLOW_DISSECTOR_KEY_GRE_KEYID, /* struct flow_dissector_key_keyid */
 	FLOW_DISSECTOR_KEY_MPLS_ENTROPY, /* struct flow_dissector_key_keyid */
