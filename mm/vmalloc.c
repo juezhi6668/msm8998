@@ -2316,9 +2316,7 @@ void *vmap(struct page **pages, unsigned int count,
 	return area->addr;
 }
 EXPORT_SYMBOL(vmap);
-static void *__vmalloc_node(unsigned long size, unsigned long align,
-			    gfp_t gfp_mask, pgprot_t prot,
-			    int node, const void *caller);
+
 static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 				 pgprot_t prot, int node)
 {
@@ -2471,7 +2469,7 @@ EXPORT_SYMBOL_GPL(__vmalloc_node_range);
  *	with mm people.
  *
  */
-static void *__vmalloc_node(unsigned long size, unsigned long align,
+void *__vmalloc_node(unsigned long size, unsigned long align,
 			    gfp_t gfp_mask, pgprot_t prot,
 			    int node, const void *caller)
 {
@@ -2485,20 +2483,6 @@ void *__vmalloc(unsigned long size, gfp_t gfp_mask, pgprot_t prot)
 				__builtin_return_address(0));
 }
 EXPORT_SYMBOL(__vmalloc);
-
-void *__vmalloc_node_flags(unsigned long size,
-					int node, gfp_t flags)
-{
-	return __vmalloc_node(size, 1, flags, PAGE_KERNEL,
-					node, __builtin_return_address(0));
-}
-
-
-void *__vmalloc_node_flags_caller(unsigned long size, int node, gfp_t flags,
-				  void *caller)
-{
-	return __vmalloc_node(size, 1, flags, PAGE_KERNEL, node, caller);
-}
 
 /**
  *	vmalloc  -  allocate virtually contiguous memory
