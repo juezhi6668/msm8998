@@ -97,8 +97,6 @@ enum bpf_map_type {
 	BPF_MAP_TYPE_LRU_HASH,
 	BPF_MAP_TYPE_LRU_PERCPU_HASH,
 	BPF_MAP_TYPE_LPM_TRIE,
-	BPF_MAP_TYPE_ARRAY_OF_MAPS,
-	BPF_MAP_TYPE_HASH_OF_MAPS,
 };
 
 enum bpf_prog_type {
@@ -126,47 +124,11 @@ enum bpf_attach_type {
 
 #define MAX_BPF_ATTACH_TYPE __MAX_BPF_ATTACH_TYPE
 
-/* cgroup-bpf attach flags used in BPF_PROG_ATTACH command
- *
- * NONE(default): No further bpf programs allowed in the subtree.
- *
- * BPF_F_ALLOW_OVERRIDE: If a sub-cgroup installs some bpf program,
- * the program in this cgroup yields to sub-cgroup program.
- *
- * BPF_F_ALLOW_MULTI: If a sub-cgroup installs some bpf program,
- * that cgroup program gets run in addition to the program in this cgroup.
- *
- * Only one program is allowed to be attached to a cgroup with
- * NONE or BPF_F_ALLOW_OVERRIDE flag.
- * Attaching another program on top of NONE or BPF_F_ALLOW_OVERRIDE will
- * release old program and attach the new one. Attach flags has to match.
- *
- * Multiple programs are allowed to be attached to a cgroup with
- * BPF_F_ALLOW_MULTI flag. They are executed in FIFO order
- * (those that were attached first, run first)
- * The programs of sub-cgroup are executed first, then programs of
- * this cgroup and then programs of parent cgroup.
- * When children program makes decision (like picking TCP CA or sock bind)
- * parent program has a chance to override it.
- *
- * A cgroup with MULTI or OVERRIDE flag allows any attach flags in sub-cgroups.
- * A cgroup with NONE doesn't allow any programs in sub-cgroups.
- * Ex1:
- * cgrp1 (MULTI progs A, B) ->
- *    cgrp2 (OVERRIDE prog C) ->
- *      cgrp3 (MULTI prog D) ->
- *        cgrp4 (OVERRIDE prog E) ->
- *          cgrp5 (NONE prog F)
- * the event in cgrp5 triggers execution of F,D,A,B in that order.
- * if prog F is detached, the execution is E,D,A,B
- * if prog F and D are detached, the execution is E,A,B
- * if prog F, E and D are detached, the execution is C,A,B
- *
- * All eligible programs are executed regardless of return code from
- * earlier programs.
+/* If BPF_F_ALLOW_OVERRIDE flag is used in BPF_PROG_ATTACH command
+ * to the given target_fd cgroup the descendent cgroup will be able to
+ * override effective bpf program that was inherited from this cgroup
  */
 #define BPF_F_ALLOW_OVERRIDE	(1U << 0)
-#define BPF_F_ALLOW_MULTI	(1U << 1)
 
 /* If BPF_F_STRICT_ALIGNMENT is used in BPF_PROG_LOAD command, the
  * verifier will perform strict alignment checking as if the kernel
@@ -191,10 +153,6 @@ enum bpf_attach_type {
  */
 #define BPF_F_NO_COMMON_LRU	(1U << 1)
 
-/* Flags for accessing BPF object */
-#define BPF_F_RDONLY		(1U << 3)
-#define BPF_F_WRONLY		(1U << 4)
-
 union bpf_attr {
 	struct { /* anonymous struct used by BPF_MAP_CREATE command */
 		__u32	map_type;	/* one of enum bpf_map_type */
@@ -202,7 +160,6 @@ union bpf_attr {
 		__u32	value_size;	/* size of value in bytes */
 		__u32	max_entries;	/* max number of entries in a map */
 		__u32	map_flags;	/* prealloc or not */
-		__u32	inner_map_fd;	/* fd pointing to the inner map */
 	};
 
 	struct { /* anonymous struct used by BPF_MAP_*_ELEM commands */
@@ -230,7 +187,6 @@ union bpf_attr {
 	struct { /* anonymous struct used by BPF_OBJ_* commands */
 		__aligned_u64	pathname;
 		__u32		bpf_fd;
-		__u32		file_flags;
 	};
 
 	struct { /* anonymous struct used by BPF_PROG_ATTACH/DETACH commands */
@@ -580,7 +536,6 @@ union bpf_attr {
 	FN(set_hash_invalid),		\
 	FN(get_numa_node_id),		\
 	FN(skb_change_head),		\
-	FN(xdp_adjust_head),		\
 	FN(probe_read_str),		\
 	FN(get_socket_cookie),		\
 	FN(get_socket_uid),
@@ -609,6 +564,7 @@ enum bpf_func_id {
 /* BPF_FUNC_l4_csum_replace flags. */
 #define BPF_F_PSEUDO_HDR		(1ULL << 4)
 #define BPF_F_MARK_MANGLED_0		(1ULL << 5)
+#define BPF_F_MARK_ENFORCE		(1ULL << 6)
 
 /* BPF_FUNC_clone_redirect and BPF_FUNC_redirect flags. */
 #define BPF_F_INGRESS			(1ULL << 0)
@@ -616,17 +572,17 @@ enum bpf_func_id {
 /* BPF_FUNC_skb_set_tunnel_key and BPF_FUNC_skb_get_tunnel_key flags. */
 #define BPF_F_TUNINFO_IPV6		(1ULL << 0)
 
-/* BPF_FUNC_skb_set_tunnel_key flags. */
-#define BPF_F_ZERO_CSUM_TX              (1ULL << 1)
-#define BPF_F_DONT_FRAGMENT             (1ULL << 2)
-
 /* BPF_FUNC_get_stackid flags. */
 #define BPF_F_SKIP_FIELD_MASK		0xffULL
 #define BPF_F_USER_STACK		(1ULL << 8)
 #define BPF_F_FAST_STACK_CMP		(1ULL << 9)
 #define BPF_F_REUSE_STACKID		(1ULL << 10)
 
-/* BPF_FUNC_perf_event_output flags and BPF_FUNC_perf_event_read. */
+/* BPF_FUNC_skb_set_tunnel_key flags. */
+#define BPF_F_ZERO_CSUM_TX		(1ULL << 1)
+#define BPF_F_DONT_FRAGMENT		(1ULL << 2)
+
+/* BPF_FUNC_perf_event_output and BPF_FUNC_perf_event_read flags. */
 #define BPF_F_INDEX_MASK		0xffffffffULL
 #define BPF_F_CURRENT_CPU		BPF_F_INDEX_MASK
 /* BPF_FUNC_perf_event_output for sk_buff input context. */
@@ -668,8 +624,6 @@ struct bpf_tunnel_key {
 	__u32 tunnel_label;
 };
 
-struct bpf_sock {
-	__u32 bound_dev_if;
 /* Generic BPF return codes which all BPF program types may support.
  * The values are binary compatible with their TC_ACT_* counter-part to
  * provide backwards compatibility with existing SCHED_CLS and SCHED_ACT
