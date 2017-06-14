@@ -157,3 +157,4 @@ void tcp_rate_gen(struct sock *sk, u32 delivered, u32 lost,
 		tp->rate_app_limited = rs->is_app_limited;
 	}
 }
+EXPORT_SYMBOL_GPL(tcp_rate_check_app_limited);
