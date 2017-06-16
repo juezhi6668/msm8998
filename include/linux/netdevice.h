@@ -830,7 +830,10 @@ struct netdev_xdp {
 		/* XDP_SETUP_PROG */
 		struct bpf_prog *prog;
 		/* XDP_QUERY_PROG */
-		bool prog_attached;
+		struct {
+			bool prog_attached;
+			u32 prog_id;
+		};
 	};
 };
 
@@ -3252,7 +3255,7 @@ struct sk_buff *dev_hard_start_xmit(struct sk_buff *skb, struct net_device *dev,
 
 typedef int (*xdp_op_t)(struct net_device *dev, struct netdev_xdp *xdp);
 int dev_change_xdp_fd(struct net_device *dev, int fd, u32 flags);
-bool __dev_xdp_attached(struct net_device *dev, xdp_op_t xdp_op);
+bool __dev_xdp_attached(struct net_device *dev, xdp_op_t xdp_op, u32 *prog_id);
 
 struct sk_buff *dev_hard_start_xmit_list(struct sk_buff *skb,
 				struct net_device *dev,
