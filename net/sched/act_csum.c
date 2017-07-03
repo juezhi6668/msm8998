@@ -225,9 +225,6 @@ static int tcf_csum_ipv4_udp(struct sk_buff *skb,
 	const struct iphdr *iph;
 	u16 ul;
 
-	if (skb_is_gso(skb) && skb_shinfo(skb)->gso_type & SKB_GSO_UDP)
-		return 1;
-
 	/*
 	 * Support both UDP and UDPLITE checksum algorithms, Don't use
 	 * udph->len to get the real length without any protocol check,
@@ -280,9 +277,6 @@ static int tcf_csum_ipv6_udp(struct sk_buff *skb,
 	struct udphdr *udph;
 	const struct ipv6hdr *ip6h;
 	u16 ul;
-
-	if (skb_is_gso(skb) && skb_shinfo(skb)->gso_type & SKB_GSO_UDP)
-		return 1;
 
 	/*
 	 * Support both UDP and UDPLITE checksum algorithms, Don't use
