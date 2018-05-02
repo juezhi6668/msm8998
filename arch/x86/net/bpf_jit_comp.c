@@ -1180,6 +1180,7 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
 	for (pass = 0; pass < 20 || image; pass++) {
 		proglen = do_jit(prog, addrs, image, oldproglen, &ctx);
 		if (proglen <= 0) {
+out_image:
 			image = NULL;
 			if (header)
 				bpf_jit_binary_free(header);
@@ -1190,8 +1191,7 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
 			if (proglen != oldproglen) {
 				pr_err("bpf_jit: proglen=%d != oldproglen=%d\n",
 				       proglen, oldproglen);
-				prog = orig_prog;
-				goto out_addrs;
+				goto out_image;
 			}
 			break;
 		}
