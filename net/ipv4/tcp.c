@@ -1134,7 +1134,7 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 	flags = msg->msg_flags;
 	if ((flags & MSG_FASTOPEN || inet_sk(sk)->defer_connect) && !tp->repair) {
 
-	if (flags & MSG_ZEROCOPY && size) {
+	if (flags & MSG_ZEROCOPY && size && sock_flag(sk, SOCK_ZEROCOPY)) {
 		if (sk->sk_state != TCP_ESTABLISHED) {
 			err = -EINVAL;
 			goto out_err;
