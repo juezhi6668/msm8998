@@ -399,10 +399,14 @@ static void bpf_jit_emit_tail_call(u32 *image, struct codegen_context *ctx, u32 
 	 *   goto out;
 	 */
 <<<<<<< HEAD
+<<<<<<< HEAD
 	PPC_BPF_LL(b2p[TMP_REG_1], 1, bpf_jit_stack_tailcallcnt(ctx));
 =======
 	PPC_LD(b2p[TMP_REG_1], 1, bpf_jit_stack_tailcallcnt(ctx));
 >>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
+=======
+	PPC_BPF_LL(b2p[TMP_REG_1], 1, bpf_jit_stack_tailcallcnt(ctx));
+>>>>>>> 91f81cb5c583... powerpc: bpf: Fix generation of load/store DW instructions
 	PPC_CMPLWI(b2p[TMP_REG_1], MAX_TAIL_CALL_CNT);
 	PPC_BCC(COND_GT, out);
 
@@ -416,10 +420,14 @@ static void bpf_jit_emit_tail_call(u32 *image, struct codegen_context *ctx, u32 
 	PPC_MULI(b2p[TMP_REG_1], b2p_index, 8);
 	PPC_ADD(b2p[TMP_REG_1], b2p[TMP_REG_1], b2p_bpf_array);
 <<<<<<< HEAD
+<<<<<<< HEAD
 	PPC_BPF_LL(b2p[TMP_REG_1], b2p[TMP_REG_1], offsetof(struct bpf_array, ptrs));
 =======
 	PPC_LD(b2p[TMP_REG_1], b2p[TMP_REG_1], offsetof(struct bpf_array, ptrs));
 >>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
+=======
+	PPC_BPF_LL(b2p[TMP_REG_1], b2p[TMP_REG_1], offsetof(struct bpf_array, ptrs));
+>>>>>>> 91f81cb5c583... powerpc: bpf: Fix generation of load/store DW instructions
 
 	/*
 	 * if (prog == NULL)
@@ -430,10 +438,14 @@ static void bpf_jit_emit_tail_call(u32 *image, struct codegen_context *ctx, u32 
 
 	/* goto *(prog->bpf_func + prologue_size); */
 <<<<<<< HEAD
+<<<<<<< HEAD
 	PPC_BPF_LL(b2p[TMP_REG_1], b2p[TMP_REG_1], offsetof(struct bpf_prog, bpf_func));
 =======
 	PPC_LD(b2p[TMP_REG_1], b2p[TMP_REG_1], offsetof(struct bpf_prog, bpf_func));
 >>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
+=======
+	PPC_BPF_LL(b2p[TMP_REG_1], b2p[TMP_REG_1], offsetof(struct bpf_prog, bpf_func));
+>>>>>>> 91f81cb5c583... powerpc: bpf: Fix generation of load/store DW instructions
 #ifdef PPC64_ELF_ABI_v1
 	/* skip past the function descriptor */
 	PPC_ADDI(b2p[TMP_REG_1], b2p[TMP_REG_1],
@@ -850,6 +862,9 @@ bpf_alu32_trunc:
 				 * same across all passes
 				 */
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 91f81cb5c583... powerpc: bpf: Fix generation of load/store DW instructions
 				PPC_BPF_STL(dst_reg, 1, bpf_jit_stack_local(ctx));
 				PPC_ADDI(b2p[TMP_REG_1], 1, bpf_jit_stack_local(ctx));
 =======
@@ -916,10 +931,14 @@ emit_clear:
 				src_reg = b2p[TMP_REG_1];
 			}
 <<<<<<< HEAD
+<<<<<<< HEAD
 			PPC_BPF_STL(src_reg, dst_reg, off);
 =======
 			PPC_STD(src_reg, dst_reg, off);
 >>>>>>> 156d0e290e96... powerpc/ebpf/jit: Implement JIT compiler for extended BPF
+=======
+			PPC_BPF_STL(src_reg, dst_reg, off);
+>>>>>>> 91f81cb5c583... powerpc: bpf: Fix generation of load/store DW instructions
 			break;
 
 		/*
@@ -1003,10 +1022,14 @@ emit_clear:
 		/* dst = *(u64 *)(ul) (src + off) */
 		case BPF_LDX | BPF_MEM | BPF_DW:
 <<<<<<< HEAD
+<<<<<<< HEAD
 			PPC_BPF_LL(dst_reg, src_reg, off);
 =======
 			PPC_LD(dst_reg, src_reg, off);
 >>>>>>> 156d0e290e96... powerpc/ebpf/jit: Implement JIT compiler for extended BPF
+=======
+			PPC_BPF_LL(dst_reg, src_reg, off);
+>>>>>>> 91f81cb5c583... powerpc: bpf: Fix generation of load/store DW instructions
 			break;
 
 		/*
