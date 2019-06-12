@@ -623,19 +623,27 @@ static int bpf_jit_build_body(struct bpf_prog *fp, u32 *image,
 			PPC_JMP(exit_addr);
 			if (BPF_OP(code) == BPF_MOD) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 				PPC_DIVDU(b2p[TMP_REG_1], dst_reg, src_reg);
 =======
 				PPC_DIVD(b2p[TMP_REG_1], dst_reg, src_reg);
 >>>>>>> 156d0e290e96... powerpc/ebpf/jit: Implement JIT compiler for extended BPF
+=======
+				PPC_DIVDU(b2p[TMP_REG_1], dst_reg, src_reg);
+>>>>>>> e90a7ecde5f3... powerpc/bpf: use unsigned division instruction for 64-bit operations
 				PPC_MULD(b2p[TMP_REG_1], src_reg,
 						b2p[TMP_REG_1]);
 				PPC_SUB(dst_reg, dst_reg, b2p[TMP_REG_1]);
 			} else
 <<<<<<< HEAD
+<<<<<<< HEAD
 				PPC_DIVDU(dst_reg, dst_reg, src_reg);
 =======
 				PPC_DIVD(dst_reg, dst_reg, src_reg);
 >>>>>>> 156d0e290e96... powerpc/ebpf/jit: Implement JIT compiler for extended BPF
+=======
+				PPC_DIVDU(dst_reg, dst_reg, src_reg);
+>>>>>>> e90a7ecde5f3... powerpc/bpf: use unsigned division instruction for 64-bit operations
 			break;
 		case BPF_ALU | BPF_MOD | BPF_K: /* (u32) dst %= (u32) imm */
 		case BPF_ALU | BPF_DIV | BPF_K: /* (u32) dst /= (u32) imm */
@@ -675,10 +683,14 @@ static int bpf_jit_build_body(struct bpf_prog *fp, u32 *image,
 			case BPF_ALU64:
 				if (BPF_OP(code) == BPF_MOD) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 					PPC_DIVDU(b2p[TMP_REG_2], dst_reg,
 =======
 					PPC_DIVD(b2p[TMP_REG_2], dst_reg,
 >>>>>>> 156d0e290e96... powerpc/ebpf/jit: Implement JIT compiler for extended BPF
+=======
+					PPC_DIVDU(b2p[TMP_REG_2], dst_reg,
+>>>>>>> e90a7ecde5f3... powerpc/bpf: use unsigned division instruction for 64-bit operations
 							b2p[TMP_REG_1]);
 					PPC_MULD(b2p[TMP_REG_1],
 							b2p[TMP_REG_1],
@@ -687,10 +699,14 @@ static int bpf_jit_build_body(struct bpf_prog *fp, u32 *image,
 							b2p[TMP_REG_1]);
 				} else
 <<<<<<< HEAD
+<<<<<<< HEAD
 					PPC_DIVDU(dst_reg, dst_reg,
 =======
 					PPC_DIVD(dst_reg, dst_reg,
 >>>>>>> 156d0e290e96... powerpc/ebpf/jit: Implement JIT compiler for extended BPF
+=======
+					PPC_DIVDU(dst_reg, dst_reg,
+>>>>>>> e90a7ecde5f3... powerpc/bpf: use unsigned division instruction for 64-bit operations
 							b2p[TMP_REG_1]);
 				break;
 			}
