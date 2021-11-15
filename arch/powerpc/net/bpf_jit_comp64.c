@@ -360,6 +360,7 @@ static void bpf_jit_emit_func_call(u32 *image, struct codegen_context *ctx, u64 
 }
 
 static int bpf_jit_emit_tail_call(u32 *image, struct codegen_context *ctx, u32 out)
+<<<<<<< HEAD
 =======
 	PPC_BPF_LL(2, b2p[TMP_REG_2], 8);
 #else
@@ -372,6 +373,8 @@ static int bpf_jit_emit_tail_call(u32 *image, struct codegen_context *ctx, u32 o
 
 static void bpf_jit_emit_tail_call(u32 *image, struct codegen_context *ctx, u32 out)
 >>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
+=======
+>>>>>>> 7a524c9478ba... powerpc/bpf: Validate branch ranges
 {
 	/*
 	 * By now, the eBPF program has already setup parameters in r3, r4 and r5
@@ -460,6 +463,7 @@ static void bpf_jit_emit_tail_call(u32 *image, struct codegen_context *ctx, u32 
 
 	PPC_BCTR();
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 	/* out: */
 	return 0;
@@ -468,7 +472,11 @@ static void bpf_jit_emit_tail_call(u32 *image, struct codegen_context *ctx, u32 
 =======
 >>>>>>> 156d0e290e96... powerpc/ebpf/jit: Implement JIT compiler for extended BPF
 =======
+=======
+
+>>>>>>> 7a524c9478ba... powerpc/bpf: Validate branch ranges
 	/* out: */
+	return 0;
 }
 
 >>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
@@ -480,10 +488,14 @@ static int bpf_jit_build_body(struct bpf_prog *fp, u32 *image,
 	const struct bpf_insn *insn = fp->insnsi;
 	int flen = fp->len;
 <<<<<<< HEAD
+<<<<<<< HEAD
 	int i, ret;
 =======
 	int i;
 >>>>>>> 156d0e290e96... powerpc/ebpf/jit: Implement JIT compiler for extended BPF
+=======
+	int i, ret;
+>>>>>>> 7a524c9478ba... powerpc/bpf: Validate branch ranges
 
 	/* Start of epilogue code - will only be valid 2nd pass onwards */
 	u32 exit_addr = addrs[flen];
@@ -1283,7 +1295,9 @@ common_load:
 		 */
 		case BPF_JMP | BPF_CALL | BPF_X:
 			ctx->seen |= SEEN_TAILCALL;
-			bpf_jit_emit_tail_call(image, ctx, addrs[i + 1]);
+			ret = bpf_jit_emit_tail_call(image, ctx, addrs[i + 1]);
+			if (ret < 0)
+				return ret;
 			break;
 >>>>>>> ce0761419fae... powerpc/bpf: Implement support for tail calls
 
