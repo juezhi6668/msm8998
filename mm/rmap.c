@@ -1769,6 +1769,7 @@ int rmap_walk(struct page *page, struct rmap_walk_control *rwc)
 		return rmap_walk_file(page, rwc);
 }
 
+#if 0
 #ifdef CONFIG_HUGETLB_PAGE
 /*
  * The following three functions are for anonymous (private mapped) hugepages.
@@ -1814,3 +1815,4 @@ void hugepage_add_new_anon_rmap(struct page *page,
 	__hugepage_set_anon_rmap(page, vma, address, 1);
 }
 #endif /* CONFIG_HUGETLB_PAGE */
+#endif
