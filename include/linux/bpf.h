@@ -437,7 +437,7 @@ static inline void __bpf_prog_uncharge(struct user_struct *user, u32 pages)
 {
 }
 
-static inline int bpf_obj_get_user(const char __user *pathname)
+static inline int bpf_obj_get_user(const char __user *pathname, int flags)
 static inline struct bpf_prog *__must_check
 bpf_prog_inc_not_zero(struct bpf_prog *prog)
 {
