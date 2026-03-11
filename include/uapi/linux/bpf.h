@@ -1527,7 +1527,7 @@ union bpf_attr {
  * 		0 on success, or a negative error in case of failure.
  */
 #define __BPF_FUNC_MAPPER(FN)		\
-	FN(unspec),			\
+FN(unspec),			\
 	FN(map_lookup_elem),		\
 	FN(map_update_elem),		\
 	FN(map_delete_elem),		\
@@ -1653,6 +1653,10 @@ union bpf_attr {
 	FN(get_current_ancestor_cgroup_id),	\
 	FN(sk_assign),			\
 	FN(ktime_get_boot_ns),		\
+	FN(seq_printf),			\
+	FN(seq_write),			\
+	FN(sk_cgroup_id),		\
+	FN(sk_ancestor_cgroup_id),	\
 	FN(ringbuf_output),		\
 	FN(ringbuf_reserve),		\
 	FN(ringbuf_submit),		\
