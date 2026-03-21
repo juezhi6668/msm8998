@@ -364,6 +364,14 @@ static void netlink_skb_set_owner_r(struct sk_buff *skb, struct sock *sk)
 	skb->destructor = netlink_skb_destructor;
 	sk_mem_charge(sk, skb->truesize);
 }
+	struct netlink_sock *nlk = nlk_sk(sk);
+
+	if (nlk->cb_running) {
+		if (nlk->cb.done)
+			nlk->cb.done(&nlk->cb);
+		module_put(nlk->cb.module);
+		kfree_skb(nlk->cb.skb);
+	}
 
 static void netlink_sock_destruct(struct sock *sk)
 {
@@ -377,6 +385,13 @@ static void netlink_sock_destruct(struct sock *sk)
 	WARN_ON(atomic_read(&sk->sk_rmem_alloc));
 	WARN_ON(atomic_read(&sk->sk_wmem_alloc));
 	WARN_ON(nlk_sk(sk)->groups);
+}
+static void netlink_sock_destruct_work(struct work_struct *work)
+{
+	struct netlink_sock *nlk = container_of(work, struct netlink_sock,
+						work);
+
+	sk_free(&nlk->sk);
 }
 
 /* This lock without WQ_FLAG_EXCLUSIVE is good on UP and it is _very_ bad on
@@ -735,13 +750,6 @@ static int netlink_release(struct socket *sock)
 				NETLINK_URELEASE, &n);
 	}
 
-	/* Terminate any outstanding dump */
-	if (nlk->cb_running) {
-		if (nlk->cb.done)
-			nlk->cb.done(&nlk->cb);
-		module_put(nlk->cb.module);
-		kfree_skb(nlk->cb.skb);
-	}
 
 	module_put(nlk->module);
 
