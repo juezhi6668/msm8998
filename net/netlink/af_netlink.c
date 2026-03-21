@@ -364,6 +364,8 @@ static void netlink_skb_set_owner_r(struct sk_buff *skb, struct sock *sk)
 	skb->destructor = netlink_skb_destructor;
 	sk_mem_charge(sk, skb->truesize);
 }
+static void netlink_sock_destruct(struct sock *sk)
+{
 	struct netlink_sock *nlk = nlk_sk(sk);
 
 	if (nlk->cb_running) {
@@ -373,8 +375,6 @@ static void netlink_skb_set_owner_r(struct sk_buff *skb, struct sock *sk)
 		kfree_skb(nlk->cb.skb);
 	}
 
-static void netlink_sock_destruct(struct sock *sk)
-{
 	skb_queue_purge(&sk->sk_receive_queue);
 
 	if (!sock_flag(sk, SOCK_DEAD)) {
