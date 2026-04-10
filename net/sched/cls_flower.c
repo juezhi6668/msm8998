@@ -855,11 +855,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 			     &fnew->key,
 			     &fnew->exts,
 			     (unsigned long)fnew,
-<<<<<<< HEAD
 			     fnew->flags);
-=======
-			     flags);
->>>>>>> 8208d21bf309... net/flower: Fix pointer cast
 
 	if (fold) {
 		rhashtable_remove_fast(&head->ht, &fold->ht_node,
