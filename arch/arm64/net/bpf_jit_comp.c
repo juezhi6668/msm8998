@@ -718,6 +718,7 @@ emit_cond_jmp:
 		} else {
 			emit(A64_LDXR(isdw, tmp2, reg), ctx);
 			emit(A64_ADD(isdw, tmp2, tmp2, src), ctx);
+                        emit(A64_PRFM(tmp, PST, L1, STRM), ctx);
 			emit(A64_STXR(isdw, tmp2, reg, tmp3), ctx);
 			jmp_offset = -3;
 			check_imm19(jmp_offset);
