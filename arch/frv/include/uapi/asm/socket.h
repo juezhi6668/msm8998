@@ -88,14 +88,5 @@
 #define SO_ATTACH_REUSEPORT_CBPF	51
 #define SO_ATTACH_REUSEPORT_EBPF	52
 
-<<<<<<< HEAD
-=======
-#define SO_CNX_ADVICE		53
-
-#define SCM_TIMESTAMPING_OPT_STATS	54
-
-#define SO_COOKIE		57
-
->>>>>>> 63c7d61dc464... BACKPORT: tcp: SOF_TIMESTAMPING_OPT_STATS option for SO_TIMESTAMPING
 #endif /* _ASM_SOCKET_H */
 

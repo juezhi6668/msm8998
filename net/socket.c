@@ -722,15 +722,9 @@ void __sock_recv_timestamp(struct msghdr *msg, struct sock *sk,
 	    (sk->sk_tsflags & SOF_TIMESTAMPING_RAW_HARDWARE) &&
 	    ktime_to_timespec_cond(shhwtstamps->hwtstamp, tss.ts + 2))
 		empty = 0;
-	if (!empty) {
+	if (!empty)
 		put_cmsg(msg, SOL_SOCKET,
 			 SCM_TIMESTAMPING, sizeof(tss), &tss);
-
-		if (skb_is_err_queue(skb) && skb->len &&
-		    SKB_EXT_ERR(skb)->opt_stats)
-			put_cmsg(msg, SOL_SOCKET, SCM_TIMESTAMPING_OPT_STATS,
-				 skb->len, skb->data);
-	}
 }
 EXPORT_SYMBOL_GPL(__sock_recv_timestamp);
 

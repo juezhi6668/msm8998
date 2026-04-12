@@ -84,15 +84,6 @@
 #define SO_ATTACH_REUSEPORT_CBPF	0x0035
 #define SO_ATTACH_REUSEPORT_EBPF	0x0036
 
-<<<<<<< HEAD
-=======
-#define SO_CNX_ADVICE		0x0037
-
-#define SCM_TIMESTAMPING_OPT_STATS	0x0038
-
-#define SO_COOKIE		0x003b
-
->>>>>>> 63c7d61dc464... BACKPORT: tcp: SOF_TIMESTAMPING_OPT_STATS option for SO_TIMESTAMPING
 /* Security levels - as per NRL IPv6 - don't actually do anything */
 #define SO_SECURITY_AUTHENTICATION		0x5001
 #define SO_SECURITY_ENCRYPTION_TRANSPORT	0x5002
