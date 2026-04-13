@@ -590,10 +590,11 @@ int ip6_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 	int ptr, offset = 0, err = 0;
 	u8 *prevhdr, nexthdr = 0;
 
-	err = ip6_find_1stfragopt(skb, &prevhdr);
-	if (err < 0)
+	hlen = ip6_find_1stfragopt(skb, &prevhdr);
+	if (hlen < 0) {
+		err = hlen;
 		goto fail;
-	hlen = err;
+	}
 	nexthdr = *prevhdr;
 	nexthdr_offset = prevhdr - skb_network_header(skb);
 
