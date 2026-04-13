@@ -8990,16 +8990,10 @@ skip_sriov:
 	case ixgbe_mac_X540:
 	case ixgbe_mac_X550:
 	case ixgbe_mac_X550EM_x:
-<<<<<<< HEAD
 		netdev->features |= NETIF_F_SCTP_CSUM;
 		netdev->hw_features |= NETIF_F_SCTP_CSUM |
-				       NETIF_F_NTUPLE;
-=======
-		netdev->features |= NETIF_F_SCTP_CRC;
-		netdev->hw_features |= NETIF_F_SCTP_CRC |
 				       NETIF_F_NTUPLE |
-				       NETIF_F_HW_TC;
->>>>>>> b82b17d929a6... net: ixgbe: add support for tc_u32 offload
+                                       NETIF_F_HW_TC;
 		break;
 	default:
 		break;
