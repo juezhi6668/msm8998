@@ -710,7 +710,7 @@ static inline bool tcp_ca_dst_locked(const struct dst_entry *dst)
 /* Minimum RTT in usec. ~0 means not available. */
 static inline u32 tcp_min_rtt(const struct tcp_sock *tp)
 {
-	return minmax_get(&tp->rtt_min);
+	return tp->rtt_min[0].rtt;
 }
 
 /* Compute the actual receive window we are currently advertising.
@@ -2069,9 +2069,6 @@ static inline int tcp_call_bpf(struct sock *sk, int op)
 {
 	struct bpf_sock_ops_kern sock_ops;
 	int ret;
-
-	if (sk_fullsock(sk))
-		sock_owned_by_me(sk);
 
 	memset(&sock_ops, 0, sizeof(sock_ops));
 	sock_ops.sk = sk;
