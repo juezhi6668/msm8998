@@ -778,8 +778,6 @@ struct bpf_tunnel_key {
 	__u32 tunnel_label;
 };
 
-struct bpf_sock {
-	__u32 bound_dev_if;
 /* Generic BPF return codes which all BPF program types may support.
  * The values are binary compatible with their TC_ACT_* counter-part to
  * provide backwards compatibility with existing SCHED_CLS and SCHED_ACT

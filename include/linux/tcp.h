@@ -19,7 +19,6 @@
 
 
 #include <linux/skbuff.h>
-#include <linux/win_minmax.h>
 #include <net/sock.h>
 #include <net/inet_connection_sock.h>
 #include <net/inet_timewait_sock.h>

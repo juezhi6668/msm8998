@@ -483,7 +483,6 @@ struct sock {
 #ifdef CONFIG_SECURITY
 	void			*sk_security;
 #endif
-	kuid_t			sk_uid;
 	struct sock_cgroup_data	sk_cgrp_data;
 	struct cg_proto		*sk_cgrp;
 	void			(*sk_state_change)(struct sock *sk);
