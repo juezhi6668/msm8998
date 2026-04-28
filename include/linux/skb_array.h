@@ -156,12 +156,6 @@ static void __skb_array_destroy_skb(void *ptr)
 	kfree_skb(ptr);
 }
 
-static inline void skb_array_unconsume(struct skb_array *a,
-				       struct sk_buff **skbs, int n)
-{
-	ptr_ring_unconsume(&a->ring, (void **)skbs, n, __skb_array_destroy_skb);
-}
-
 static inline int skb_array_resize(struct skb_array *a, int size, gfp_t gfp)
 {
 	return ptr_ring_resize(&a->ring, size, gfp, __skb_array_destroy_skb);
