@@ -2070,6 +2070,9 @@ static inline int tcp_call_bpf(struct sock *sk, int op)
 	struct bpf_sock_ops_kern sock_ops;
 	int ret;
 
+	if (sk_fullsock(sk))
+		sock_owned_by_me(sk);
+
 	memset(&sock_ops, 0, sizeof(sock_ops));
 	sock_ops.sk = sk;
 	sock_ops.op = op;
