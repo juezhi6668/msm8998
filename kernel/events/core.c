@@ -7798,6 +7798,8 @@ static int perf_event_drv_configs(struct perf_event *event,
 		return -EINVAL;
 
 	return event->pmu->get_drv_configs(event, arg);
+}
+
 /*
  * Allocate a new address filter
  */
