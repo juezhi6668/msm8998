@@ -267,7 +267,7 @@ static int tcf_nat_dump(struct sk_buff *skb, struct tc_action *a,
 	t.install = jiffies_to_clock_t(jiffies - p->tcf_tm.install);
 	t.lastuse = jiffies_to_clock_t(jiffies - p->tcf_tm.lastuse);
 	t.expires = jiffies_to_clock_t(p->tcf_tm.expires);
-	if (nla_put_64bit(skb, TCA_NAT_TM, sizeof(t), &t, TCA_NAT_PAD))
+	if (nla_put(skb, TCA_NAT_TM, sizeof(t), &t))
 		goto nla_put_failure;
 
 	return skb->len;

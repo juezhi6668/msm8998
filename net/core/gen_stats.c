@@ -25,9 +25,9 @@
 
 
 static inline int
-gnet_stats_copy(struct gnet_dump *d, int type, void *buf, int size, int padattr)
+gnet_stats_copy(struct gnet_dump *d, int type, void *buf, int size)
 {
-	if (nla_put_64bit(d->skb, type, size, buf, padattr))
+	if (nla_put(d->skb, type, size, buf))
 		goto nla_put_failure;
 	return 0;
 
@@ -59,8 +59,7 @@ nla_put_failure:
  */
 int
 gnet_stats_start_copy_compat(struct sk_buff *skb, int type, int tc_stats_type,
-			     int xstats_type, spinlock_t *lock,
-			     struct gnet_dump *d, int padattr)
+	int xstats_type, spinlock_t *lock, struct gnet_dump *d)
 	__acquires(lock)
 {
 	memset(d, 0, sizeof(*d));
@@ -72,17 +71,16 @@ gnet_stats_start_copy_compat(struct sk_buff *skb, int type, int tc_stats_type,
 	d->skb = skb;
 	d->compat_tc_stats = tc_stats_type;
 	d->compat_xstats = xstats_type;
-	d->padattr = padattr;
 
 	if (d->tail)
-		return gnet_stats_copy(d, type, NULL, 0, padattr);
+		return gnet_stats_copy(d, type, NULL, 0);
 
 	return 0;
 }
 EXPORT_SYMBOL(gnet_stats_start_copy_compat);
 
 /**
- * gnet_stats_start_copy - start dumping procedure in compatibility mode
+ * gnet_stats_start_copy_compat - start dumping procedure in compatibility mode
  * @skb: socket buffer to put statistics TLVs into
  * @type: TLV type for top level statistic TLV
  * @lock: statistics lock
@@ -96,9 +94,9 @@ EXPORT_SYMBOL(gnet_stats_start_copy_compat);
  */
 int
 gnet_stats_start_copy(struct sk_buff *skb, int type, spinlock_t *lock,
-		      struct gnet_dump *d, int padattr)
+	struct gnet_dump *d)
 {
-	return gnet_stats_start_copy_compat(skb, type, 0, 0, lock, d, padattr);
+	return gnet_stats_start_copy_compat(skb, type, 0, 0, lock, d);
 }
 EXPORT_SYMBOL(gnet_stats_start_copy);
 
@@ -171,8 +169,7 @@ gnet_stats_copy_basic(struct gnet_dump *d,
 		memset(&sb, 0, sizeof(sb));
 		sb.bytes = bstats.bytes;
 		sb.packets = bstats.packets;
-		return gnet_stats_copy(d, TCA_STATS_BASIC, &sb, sizeof(sb),
-				       TCA_STATS_PAD);
+		return gnet_stats_copy(d, TCA_STATS_BASIC, &sb, sizeof(sb));
 	}
 	return 0;
 }
@@ -211,13 +208,11 @@ gnet_stats_copy_rate_est(struct gnet_dump *d,
 	}
 
 	if (d->tail) {
-		res = gnet_stats_copy(d, TCA_STATS_RATE_EST, &est, sizeof(est),
-				      TCA_STATS_PAD);
+		res = gnet_stats_copy(d, TCA_STATS_RATE_EST, &est, sizeof(est));
 		if (res < 0 || est.bps == r->bps)
 			return res;
 		/* emit 64bit stats only if needed */
-		return gnet_stats_copy(d, TCA_STATS_RATE_EST64, r, sizeof(*r),
-				       TCA_STATS_PAD);
+		return gnet_stats_copy(d, TCA_STATS_RATE_EST64, r, sizeof(*r));
 	}
 
 	return 0;
@@ -291,8 +286,7 @@ gnet_stats_copy_queue(struct gnet_dump *d,
 
 	if (d->tail)
 		return gnet_stats_copy(d, TCA_STATS_QUEUE,
-				       &qstats, sizeof(qstats),
-				       TCA_STATS_PAD);
+				       &qstats, sizeof(qstats));
 
 	return 0;
 }
@@ -322,8 +316,7 @@ gnet_stats_copy_app(struct gnet_dump *d, void *st, int len)
 	}
 
 	if (d->tail)
-		return gnet_stats_copy(d, TCA_STATS_APP, st, len,
-				       TCA_STATS_PAD);
+		return gnet_stats_copy(d, TCA_STATS_APP, st, len);
 
 	return 0;
 
@@ -354,12 +347,12 @@ gnet_stats_finish_copy(struct gnet_dump *d)
 
 	if (d->compat_tc_stats)
 		if (gnet_stats_copy(d, d->compat_tc_stats, &d->tc_stats,
-				    sizeof(d->tc_stats), d->padattr) < 0)
+			sizeof(d->tc_stats)) < 0)
 			return -1;
 
 	if (d->compat_xstats && d->xstats) {
 		if (gnet_stats_copy(d, d->compat_xstats, d->xstats,
-				    d->xstats_len, d->padattr) < 0)
+			d->xstats_len) < 0)
 			return -1;
 	}
 
