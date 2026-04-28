@@ -1086,7 +1086,7 @@ static int groups_to_user(gid_t __user *dst, const struct group_info *src)
 	int i;
 
 	for (i = 0; i < src->ngroups; i++)
-		if (put_user(from_kgid_munged(user_ns, src->gid[i]), dst + i))
+		if (put_user(from_kgid_munged(user_ns, GROUP_AT(src, i)), dst + i))
 			return -EFAULT;
 
 	return 0;

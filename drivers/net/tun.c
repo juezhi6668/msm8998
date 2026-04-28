@@ -79,7 +79,6 @@
 #include <net/ax25.h>
 #include <net/rose.h>
 #include <net/6lowpan.h>
-#include <linux/skb_array.h>
 
 #include <asm/uaccess.h>
 
