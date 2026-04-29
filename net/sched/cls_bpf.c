@@ -408,7 +408,6 @@ static int cls_bpf_set_parms(struct net *net, struct tcf_proto *tp,
 		if (gen_flags & ~CLS_BPF_SUPPORTED_GEN_FLAGS ||
 		    !tc_flags_valid(gen_flags)) {
 			ret = -EINVAL;
-			goto errout;
 		}
 	}
 
