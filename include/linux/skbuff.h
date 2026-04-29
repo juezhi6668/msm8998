@@ -2229,11 +2229,6 @@ static inline unsigned char *skb_mac_header(const struct sk_buff *skb)
 	return skb->head + skb->mac_header;
 }
 
-static inline int skb_mac_offset(const struct sk_buff *skb)
-{
-	return skb_mac_header(skb) - skb->data;
-}
-
 static inline u32 skb_mac_header_len(const struct sk_buff *skb)
 {
 	return skb->network_header - skb->mac_header;
