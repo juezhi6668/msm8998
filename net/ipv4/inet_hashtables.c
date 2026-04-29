@@ -173,6 +173,7 @@ EXPORT_SYMBOL_GPL(__inet_inherit_port);
 
 static inline int compute_score(struct sock *sk, struct net *net,
 				const unsigned short hnum, const __be32 daddr,
+				const int dif)
 {
 	int score = -1;
 	struct inet_sock *inet = inet_sk(sk);
@@ -188,13 +189,8 @@ static inline int compute_score(struct sock *sk, struct net *net,
 		}
 		if (sk->sk_bound_dev_if) {
 			if (sk->sk_bound_dev_if != dif)
-                        bool dev_match = (sk->sk_bound_dev_if == dif ||
-                                          sk->sk_bound_dev_if == sdif);
-
-                        if (!dev_match)
 				return -1;
-			if (sk->sk_bound_dev_if && dev_match)
-				score += 4;
+			score += 4;
 		}
 		if (sk->sk_incoming_cpu == raw_smp_processor_id())
 			score++;
@@ -215,7 +211,7 @@ struct sock *__inet_lookup_listener(struct net *net,
 				    struct sk_buff *skb, int doff,
 				    const __be32 saddr, __be16 sport,
 				    const __be32 daddr, const unsigned short hnum,
-				    const int dif, const int sdif)
+				    const int dif)
 {
 	struct sock *sk, *result;
 	struct hlist_nulls_node *node;
@@ -230,7 +226,7 @@ begin:
 	result = NULL;
 	hiscore = 0;
 	sk_nulls_for_each_rcu(sk, node, &ilb->head) {
-		score = compute_score(sk, net, hnum, daddr, dif, sdif);
+		score = compute_score(sk, net, hnum, daddr, dif);
 		if (score > hiscore) {
 			result = sk;
 			hiscore = score;
@@ -304,7 +300,7 @@ struct sock *__inet_lookup_established(struct net *net,
 				  struct inet_hashinfo *hashinfo,
 				  const __be32 saddr, const __be16 sport,
 				  const __be32 daddr, const u16 hnum,
-				  const int dif, const int sdif)
+				  const int dif)
 {
 	INET_ADDR_COOKIE(acookie, saddr, daddr);
 	const __portpair ports = INET_COMBINED_PORTS(sport, hnum);
@@ -323,12 +319,11 @@ begin:
 		if (sk->sk_hash != hash)
 			continue;
 		if (likely(INET_MATCH(sk, net, acookie,
-				      saddr, daddr, ports, dif, sdif))) {
+				      saddr, daddr, ports, dif))) {
 			if (unlikely(!atomic_inc_not_zero(&sk->sk_refcnt)))
 				goto out;
 			if (unlikely(!INET_MATCH(sk, net, acookie,
-						 saddr, daddr, ports,
-						 dif, sdif))) {
+						 saddr, daddr, ports, dif))) {
 				sock_gen_put(sk);
 				goto begin;
 			}
@@ -360,10 +355,9 @@ static int __inet_check_established(struct inet_timewait_death_row *death_row,
 	__be32 daddr = inet->inet_rcv_saddr;
 	__be32 saddr = inet->inet_daddr;
 	int dif = sk->sk_bound_dev_if;
-	struct net *net = sock_net(sk);
-	int sdif = l3mdev_master_ifindex_by_index(net, dif);
 	INET_ADDR_COOKIE(acookie, saddr, daddr);
 	const __portpair ports = INET_COMBINED_PORTS(inet->inet_dport, lport);
+	struct net *net = sock_net(sk);
 	unsigned int hash = inet_ehashfn(net, daddr, lport,
 					 saddr, inet->inet_dport);
 	struct inet_ehash_bucket *head = inet_ehash_bucket(hinfo, hash);
@@ -379,7 +373,7 @@ static int __inet_check_established(struct inet_timewait_death_row *death_row,
 			continue;
 
 		if (likely(INET_MATCH(sk2, net, acookie,
-					 saddr, daddr, ports, dif, sdif))) {
+					 saddr, daddr, ports, dif))) {
 			if (sk2->sk_state == TCP_TIME_WAIT) {
 				tw = inet_twsk(sk2);
 				if (twsk_unique(sk, sk2, twp))
