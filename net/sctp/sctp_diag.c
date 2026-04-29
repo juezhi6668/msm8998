@@ -158,9 +158,8 @@ static int inet_sctp_diag_fill(struct sock *sk, struct sctp_association *asoc,
 	if (ext & (1 << (INET_DIAG_INFO - 1))) {
 		struct nlattr *attr;
 
-		attr = nla_reserve_64bit(skb, INET_DIAG_INFO,
-					 sizeof(struct sctp_info),
-					 INET_DIAG_PAD);
+		attr = nla_reserve(skb, INET_DIAG_INFO,
+				   sizeof(struct sctp_info));
 		if (!attr)
 			goto errout;
 

@@ -247,9 +247,8 @@ int inet_sk_diag_fill(struct sock *sk, struct inet_connection_sock *icsk,
 #undef EXPIRES_IN_MS
 
 	if ((ext & (1 << (INET_DIAG_INFO - 1))) && handler->idiag_info_size) {
-		attr = nla_reserve_64bit(skb, INET_DIAG_INFO,
-					 handler->idiag_info_size,
-					 INET_DIAG_PAD);
+		attr = nla_reserve(skb, INET_DIAG_INFO,
+				   handler->idiag_info_size);
 		if (!attr)
 			goto errout;
 
@@ -1190,9 +1189,7 @@ int inet_diag_handler_get_info(struct sk_buff *skb, struct sock *sk)
 	}
 
 	attr = handler->idiag_info_size
-		? nla_reserve_64bit(skb, INET_DIAG_INFO,
-				    handler->idiag_info_size,
-				    INET_DIAG_PAD)
+		? nla_reserve(skb, INET_DIAG_INFO, handler->idiag_info_size)
 		: NULL;
 	if (attr)
 		info = nla_data(attr);
