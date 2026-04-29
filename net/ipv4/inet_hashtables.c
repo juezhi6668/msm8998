@@ -192,7 +192,7 @@ static inline int compute_score(struct sock *sk, struct net *net,
                         bool dev_match = (sk->sk_bound_dev_if == dif ||
                                           sk->sk_bound_dev_if == sdif);
 
-                        if (dev_match)
+                        if (!dev_match)
 				return -1;
 			if (sk->sk_bound_dev_if && dev_match)
 				score += 4;
