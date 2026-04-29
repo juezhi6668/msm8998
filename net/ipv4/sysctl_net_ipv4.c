@@ -148,7 +148,7 @@ static int ipv4_ping_group_range(struct ctl_table *table, int write,
 	urange[1] = from_kgid_munged(user_ns, high);
 	ret = proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
 
-net/ipv4/sysctl_net_ipv4.c	if (write && ret == 0) {
+        	if (write && ret == 0) {
 		low = make_kgid(user_ns, urange[0]);
 		high = make_kgid(user_ns, urange[1]);
 		if (!gid_valid(low) || !gid_valid(high))
