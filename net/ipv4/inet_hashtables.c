@@ -173,7 +173,6 @@ EXPORT_SYMBOL_GPL(__inet_inherit_port);
 
 static inline int compute_score(struct sock *sk, struct net *net,
 				const unsigned short hnum, const __be32 daddr,
-				const int dif, const int sdif)
 {
 	int score = -1;
 	struct inet_sock *inet = inet_sk(sk);

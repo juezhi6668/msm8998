@@ -7582,7 +7582,6 @@ static int perf_event_drv_configs(struct perf_event *event,
 		return -EINVAL;
 
 	return event->pmu->get_drv_configs(event, arg);
-}
 
 static int perf_event_set_filter(struct perf_event *event, void __user *arg)
 {
