@@ -78,7 +78,6 @@ int gro_cells_init(struct gro_cells *gcells, struct net_device *dev)
 
 		__skb_queue_head_init(&cell->napi_skbs);
 
-		set_bit(NAPI_STATE_NO_BUSY_POLL, &cell->napi.state);
 
 		netif_napi_add(dev, &cell->napi, gro_cell_poll, 
 			       NAPI_POLL_WEIGHT);
