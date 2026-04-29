@@ -74,10 +74,8 @@ static struct sk_buff *__skb_udp_tunnel_segment(struct sk_buff *skb,
 	need_ipsec = skb_dst(skb) && dst_xfrm(skb_dst(skb));
 	/* Try to offload checksum if possible */
 	offload_csum = !!(need_csum &&
-			  !need_ipsec &&
 			  (skb->dev->features &
-			   (is_ipv6 ? (NETIF_F_HW_CSUM | NETIF_F_IPV6_CSUM) :
-				      (NETIF_F_HW_CSUM | NETIF_F_IP_CSUM))));
+			   (is_ipv6 ? NETIF_F_V6_CSUM : NETIF_F_V4_CSUM)));
 
 	features &= skb->dev->hw_enc_features;
 
