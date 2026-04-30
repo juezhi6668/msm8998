@@ -107,7 +107,6 @@ struct netns_ipv4 {
 	int sysctl_tcp_retries2;
 	int sysctl_tcp_orphan_retries;
 	int sysctl_tcp_fin_timeout;
-	unsigned int sysctl_tcp_notsent_lowat;
 	int sysctl_tcp_default_init_rwnd;
 
 #ifdef CONFIG_NET_L3_MASTER_DEV
