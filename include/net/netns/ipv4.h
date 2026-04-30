@@ -97,7 +97,6 @@ struct netns_ipv4 {
 
 	int sysctl_tcp_keepalive_time;
 	int sysctl_tcp_keepalive_probes;
-	int sysctl_tcp_keepalive_intvl;
 
 	int sysctl_tcp_default_init_rwnd;
 
