@@ -115,7 +115,6 @@ struct netns_ipv4 {
 #endif
 
 	int sysctl_igmp_max_memberships;
-	int sysctl_igmp_max_msf;
 
 	struct ping_group_range ping_group_range;
 
