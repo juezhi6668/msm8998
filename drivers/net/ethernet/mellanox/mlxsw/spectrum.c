@@ -2854,6 +2854,7 @@ err_col_port_add:
 }
 
 static void mlxsw_sp_vport_bridge_leave(struct mlxsw_sp_port *mlxsw_sp_vport,
+					struct net_device *br_dev,
 					bool flush_fdb);
 
 static void mlxsw_sp_port_lag_leave(struct mlxsw_sp_port *mlxsw_sp_port,
@@ -2884,7 +2885,7 @@ static void mlxsw_sp_port_lag_leave(struct mlxsw_sp_port *mlxsw_sp_port,
 			continue;
 
 		br_dev = mlxsw_sp_vport_br_get(mlxsw_sp_vport);
-		mlxsw_sp_vport_bridge_leave(mlxsw_sp_vport, false);
+		mlxsw_sp_vport_bridge_leave(mlxsw_sp_vport, br_dev, false);
 	}
 
 	if (mlxsw_sp_port->bridged) {
@@ -2976,7 +2977,7 @@ static void mlxsw_sp_port_vlan_unlink(struct mlxsw_sp_port *mlxsw_sp_port,
 		struct net_device *br_dev;
 
 		br_dev = mlxsw_sp_vport_br_get(mlxsw_sp_vport);
-		mlxsw_sp_vport_bridge_leave(mlxsw_sp_vport, true);
+		mlxsw_sp_vport_bridge_leave(mlxsw_sp_vport, br_dev, true);
 	}
 
 	mlxsw_sp_vport->dev = mlxsw_sp_port->dev;
@@ -3271,6 +3272,7 @@ err_vport_br_vfid_join:
 }
 
 static void mlxsw_sp_vport_bridge_leave(struct mlxsw_sp_port *mlxsw_sp_vport,
+					struct net_device *br_dev,
 					bool flush_fdb)
 {
 	u16 vid = mlxsw_sp_vport_vid_get(mlxsw_sp_vport);
@@ -3349,7 +3351,8 @@ static int mlxsw_sp_netdevice_vport_event(struct net_device *dev,
 			 */
 			if (!mlxsw_sp_vport)
 				return 0;
-			mlxsw_sp_vport_bridge_leave(mlxsw_sp_vport, true);
+			mlxsw_sp_vport_bridge_leave(mlxsw_sp_vport, upper_dev,
+						    true);
 		}
 	}
 
