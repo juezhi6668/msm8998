@@ -55,10 +55,10 @@
 static u16 mlxsw_sp_port_vid_to_fid_get(struct mlxsw_sp_port *mlxsw_sp_port,
 					u16 vid)
 {
-	struct mlxsw_sp_fid *f = mlxsw_sp_vport_fid_get(mlxsw_sp_port);
 	u16 fid = vid;
 
-	fid = f ? f->fid : fid;
+	if (mlxsw_sp_port_is_vport(mlxsw_sp_port))
+		fid = mlxsw_sp_vport_fid_get(mlxsw_sp_port)->fid;
 
 	if (!fid)
 		fid = mlxsw_sp_port->pvid;
@@ -1188,8 +1188,7 @@ static int mlxsw_sp_port_fdb_dump(struct mlxsw_sp_port *mlxsw_sp_port,
 {
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
 	struct mlxsw_sp_port *tmp;
-	struct mlxsw_sp_fid *f;
-	u16 vport_fid;
+	u16 vport_fid = 0;
 	char *sfd_pl;
 	char mac[ETH_ALEN];
 	u16 fid;
@@ -1204,8 +1203,8 @@ static int mlxsw_sp_port_fdb_dump(struct mlxsw_sp_port *mlxsw_sp_port,
 	if (!sfd_pl)
 		return -ENOMEM;
 
-	f = mlxsw_sp_vport_fid_get(mlxsw_sp_port);
-	vport_fid = f ? f->fid : 0;
+	if (mlxsw_sp_port_is_vport(mlxsw_sp_port))
+		vport_fid = mlxsw_sp_vport_fid_get(mlxsw_sp_port)->fid;
 
 	mlxsw_reg_sfd_pack(sfd_pl, MLXSW_REG_SFD_OP_QUERY_DUMP, 0);
 	do {
