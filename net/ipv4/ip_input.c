@@ -308,13 +308,16 @@ drop:
 	return true;
 }
 
+int sysctl_ip_early_demux __read_mostly = 1;
+EXPORT_SYMBOL(sysctl_ip_early_demux);
+
 static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	const struct iphdr *iph = ip_hdr(skb);
 	struct rtable *rt;
 	void (*edemux)(struct sk_buff *skb);
 
-	if (net->ipv4.sysctl_ip_early_demux &&
+	if (sysctl_ip_early_demux &&
 	    !skb_dst(skb) &&
 	    !skb->sk &&
 	    !ip_is_fragment(iph)) {

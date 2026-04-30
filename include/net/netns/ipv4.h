@@ -87,7 +87,6 @@ struct netns_ipv4 {
 	int sysctl_ip_nonlocal_bind;
 	/* Shall we try to damage output packets if routing dev changes? */
 	int sysctl_ip_dynaddr;
-	int sysctl_ip_early_demux;
 	int sysctl_tcp_early_demux;
 	int sysctl_udp_early_demux;
 
