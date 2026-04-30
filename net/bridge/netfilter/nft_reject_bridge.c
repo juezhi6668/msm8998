@@ -54,7 +54,6 @@ static void nft_reject_br_send_v4_tcp_reset(struct sk_buff *oldskb,
 	struct iphdr *niph;
 	const struct tcphdr *oth;
 	struct tcphdr _oth;
-	struct net *net = sock_net(oldskb->sk);
 
 	if (!nft_bridge_iphdr_validate(oldskb))
 		return;
@@ -70,9 +69,9 @@ static void nft_reject_br_send_v4_tcp_reset(struct sk_buff *oldskb,
 
 	skb_reserve(nskb, LL_MAX_HEADER);
 	niph = nf_reject_iphdr_put(nskb, oldskb, IPPROTO_TCP,
-				   net->ipv4.sysctl_ip_default_ttl);
+				   sysctl_ip_default_ttl);
 	nf_reject_ip_tcphdr_put(nskb, oldskb, oth);
-	niph->ttl	= net->ipv4.sysctl_ip_default_ttl;
+	niph->ttl	= sysctl_ip_default_ttl;
 	niph->tot_len	= htons(nskb->len);
 	ip_send_check(niph);
 
@@ -92,7 +91,6 @@ static void nft_reject_br_send_v4_unreach(struct sk_buff *oldskb,
 	void *payload;
 	__wsum csum;
 	u8 proto;
-	struct net *net = sock_net(oldskb->sk);
 
 	if (oldskb->csum_bad || !nft_bridge_iphdr_validate(oldskb))
 		return;
@@ -127,7 +125,7 @@ static void nft_reject_br_send_v4_unreach(struct sk_buff *oldskb,
 
 	skb_reserve(nskb, LL_MAX_HEADER);
 	niph = nf_reject_iphdr_put(nskb, oldskb, IPPROTO_ICMP,
-				   net->ipv4.sysctl_ip_default_ttl);
+				   sysctl_ip_default_ttl);
 
 	skb_reset_transport_header(nskb);
 	icmph = (struct icmphdr *)skb_put(nskb, sizeof(struct icmphdr));
