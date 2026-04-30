@@ -142,7 +142,6 @@ static int mlxsw_sp_port_pg_destroy(struct mlxsw_sp_port *mlxsw_sp_port,
 static int mlxsw_sp_port_headroom_set(struct mlxsw_sp_port *mlxsw_sp_port,
 				      struct ieee_ets *ets)
 {
-	bool pause_en = mlxsw_sp_port_is_pause_en(mlxsw_sp_port);
 	struct ieee_ets *my_ets = mlxsw_sp_port->dcb.ets;
 	struct net_device *dev = mlxsw_sp_port->dev;
 	int err;
@@ -151,7 +150,7 @@ static int mlxsw_sp_port_headroom_set(struct mlxsw_sp_port *mlxsw_sp_port,
 	 * traffic is still directed to them.
 	 */
 	err = __mlxsw_sp_port_headroom_set(mlxsw_sp_port, dev->mtu,
-					   ets->prio_tc, pause_en);
+					   ets->prio_tc);
 	if (err) {
 		netdev_err(dev, "Failed to configure port's headroom\n");
 		return err;
