@@ -22,6 +22,7 @@
 #include <linux/gfp.h>
 #include <net/tcp.h>
 
+int sysctl_tcp_orphan_retries __read_mostly;
 int sysctl_tcp_thin_linear_timeouts __read_mostly;
 
 /*Function to reset tcp_ack related sysctl on resetting master control */
@@ -126,7 +127,7 @@ static int tcp_out_of_resources(struct sock *sk, bool do_reset)
 /* Calculate maximal number or retries on an orphaned socket. */
 static int tcp_orphan_retries(struct sock *sk, bool alive)
 {
-	int retries = sock_net(sk)->ipv4.sysctl_tcp_orphan_retries; /* May be zero. */
+	int retries = sysctl_tcp_orphan_retries; /* May be zero. */
 
 	/* We know from an ICMP that something is wrong. */
 	if (sk->sk_err_soft && !alive)
