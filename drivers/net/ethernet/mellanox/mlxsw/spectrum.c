@@ -2517,37 +2517,16 @@ static struct mlxsw_driver mlxsw_sp_driver = {
 	.profile			= &mlxsw_sp_config_profile,
 };
 
-static bool mlxsw_sp_lag_port_fid_member(struct mlxsw_sp_port *lag_port,
-					 u16 fid)
-{
-	if (mlxsw_sp_fid_is_vfid(fid))
-		return mlxsw_sp_port_vport_find_by_fid(lag_port, fid);
-	else
-		return test_bit(fid, lag_port->active_vlans);
-}
-
-static bool mlxsw_sp_port_fdb_should_flush(struct mlxsw_sp_port *mlxsw_sp_port,
-					   u16 fid)
+static int
+mlxsw_sp_port_fdb_flush_by_port(const struct mlxsw_sp_port *mlxsw_sp_port)
 {
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
-	u8 local_port = mlxsw_sp_port->local_port;
-	u16 lag_id = mlxsw_sp_port->lag_id;
-	int i, count = 0;
+	char sfdf_pl[MLXSW_REG_SFDF_LEN];
 
-	if (!mlxsw_sp_port->lagged)
-		return true;
+	mlxsw_reg_sfdf_pack(sfdf_pl, MLXSW_REG_SFDF_FLUSH_PER_PORT);
+	mlxsw_reg_sfdf_system_port_set(sfdf_pl, mlxsw_sp_port->local_port);
 
-	for (i = 0; i < MLXSW_SP_PORT_PER_LAG_MAX; i++) {
-		struct mlxsw_sp_port *lag_port;
-
-		lag_port = mlxsw_sp_port_lagged_get(mlxsw_sp, lag_id, i);
-		if (!lag_port || lag_port->local_port == local_port)
-			continue;
-		if (mlxsw_sp_lag_port_fid_member(lag_port, fid))
-			count++;
-	}
-
-	return !count;
+	return mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(sfdf), sfdf_pl);
 }
 
 static int
@@ -2566,6 +2545,18 @@ mlxsw_sp_port_fdb_flush_by_port_fid(const struct mlxsw_sp_port *mlxsw_sp_port,
 }
 
 static int
+mlxsw_sp_port_fdb_flush_by_lag_id(const struct mlxsw_sp_port *mlxsw_sp_port)
+{
+	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
+	char sfdf_pl[MLXSW_REG_SFDF_LEN];
+
+	mlxsw_reg_sfdf_pack(sfdf_pl, MLXSW_REG_SFDF_FLUSH_PER_LAG);
+	mlxsw_reg_sfdf_lag_id_set(sfdf_pl, mlxsw_sp_port->lag_id);
+
+	return mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(sfdf), sfdf_pl);
+}
+
+static int
 mlxsw_sp_port_fdb_flush_by_lag_id_fid(const struct mlxsw_sp_port *mlxsw_sp_port,
 				      u16 fid)
 {
@@ -2579,16 +2570,59 @@ mlxsw_sp_port_fdb_flush_by_lag_id_fid(const struct mlxsw_sp_port *mlxsw_sp_port,
 	return mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(sfdf), sfdf_pl);
 }
 
-int mlxsw_sp_port_fdb_flush(struct mlxsw_sp_port *mlxsw_sp_port, u16 fid)
+static int
+__mlxsw_sp_port_fdb_flush(const struct mlxsw_sp_port *mlxsw_sp_port)
 {
-	if (!mlxsw_sp_port_fdb_should_flush(mlxsw_sp_port, fid))
-		return 0;
+	int err, last_err = 0;
+	u16 vid;
 
-	if (mlxsw_sp_port->lagged)
-		return mlxsw_sp_port_fdb_flush_by_lag_id_fid(mlxsw_sp_port,
+	for (vid = 1; vid < VLAN_N_VID - 1; vid++) {
+		err = mlxsw_sp_port_fdb_flush_by_port_fid(mlxsw_sp_port, vid);
+		if (err)
+			last_err = err;
+	}
+
+	return last_err;
+}
+
+static int
+__mlxsw_sp_port_fdb_flush_lagged(const struct mlxsw_sp_port *mlxsw_sp_port)
+{
+	int err, last_err = 0;
+	u16 vid;
+
+	for (vid = 1; vid < VLAN_N_VID - 1; vid++) {
+		err = mlxsw_sp_port_fdb_flush_by_lag_id_fid(mlxsw_sp_port, vid);
+		if (err)
+			last_err = err;
+	}
+
+	return last_err;
+}
+
+static int mlxsw_sp_port_fdb_flush(struct mlxsw_sp_port *mlxsw_sp_port)
+{
+	if (!list_empty(&mlxsw_sp_port->vports_list))
+		if (mlxsw_sp_port->lagged)
+			return __mlxsw_sp_port_fdb_flush_lagged(mlxsw_sp_port);
+		else
+			return __mlxsw_sp_port_fdb_flush(mlxsw_sp_port);
+	else
+		if (mlxsw_sp_port->lagged)
+			return mlxsw_sp_port_fdb_flush_by_lag_id(mlxsw_sp_port);
+		else
+			return mlxsw_sp_port_fdb_flush_by_port(mlxsw_sp_port);
+}
+
+static int mlxsw_sp_vport_fdb_flush(struct mlxsw_sp_port *mlxsw_sp_vport,
+				    u16 fid)
+{
+	if (mlxsw_sp_vport->lagged)
+		return mlxsw_sp_port_fdb_flush_by_lag_id_fid(mlxsw_sp_vport,
 							     fid);
 	else
-		return mlxsw_sp_port_fdb_flush_by_port_fid(mlxsw_sp_port, fid);
+		return mlxsw_sp_port_fdb_flush_by_port_fid(mlxsw_sp_vport,
+							   fid);
 }
 
 static bool mlxsw_sp_port_dev_check(const struct net_device *dev)
@@ -2641,9 +2675,13 @@ static int mlxsw_sp_port_bridge_join(struct mlxsw_sp_port *mlxsw_sp_port,
 	return 0;
 }
 
-static void mlxsw_sp_port_bridge_leave(struct mlxsw_sp_port *mlxsw_sp_port)
+static void mlxsw_sp_port_bridge_leave(struct mlxsw_sp_port *mlxsw_sp_port,
+				       bool flush_fdb)
 {
 	struct net_device *dev = mlxsw_sp_port->dev;
+
+	if (flush_fdb && mlxsw_sp_port_fdb_flush(mlxsw_sp_port))
+		netdev_err(mlxsw_sp_port->dev, "Failed to flush FDB\n");
 
 	mlxsw_sp_port_pvid_set(mlxsw_sp_port, 1);
 
@@ -2818,7 +2856,8 @@ err_col_port_add:
 	return err;
 }
 
-static void mlxsw_sp_vport_bridge_leave(struct mlxsw_sp_port *mlxsw_sp_vport);
+static void mlxsw_sp_vport_bridge_leave(struct mlxsw_sp_port *mlxsw_sp_vport,
+					bool flush_fdb);
 
 static void mlxsw_sp_port_lag_leave(struct mlxsw_sp_port *mlxsw_sp_port,
 				    struct net_device *lag_dev)
@@ -2848,16 +2887,19 @@ static void mlxsw_sp_port_lag_leave(struct mlxsw_sp_port *mlxsw_sp_port,
 			continue;
 
 		br_dev = mlxsw_sp_vport_br_get(mlxsw_sp_vport);
-		mlxsw_sp_vport_bridge_leave(mlxsw_sp_vport);
+		mlxsw_sp_vport_bridge_leave(mlxsw_sp_vport, false);
 	}
 
 	if (mlxsw_sp_port->bridged) {
 		mlxsw_sp_port_active_vlans_del(mlxsw_sp_port);
-		mlxsw_sp_port_bridge_leave(mlxsw_sp_port);
+		mlxsw_sp_port_bridge_leave(mlxsw_sp_port, false);
 	}
 
-	if (lag->ref_count == 1)
+	if (lag->ref_count == 1) {
+		if (mlxsw_sp_port_fdb_flush_by_lag_id(mlxsw_sp_port))
+			netdev_err(mlxsw_sp_port->dev, "Failed to flush FDB\n");
 		mlxsw_sp_lag_destroy(mlxsw_sp, lag_id);
+	}
 
 	mlxsw_core_lag_mapping_clear(mlxsw_sp->core, lag_id,
 				     mlxsw_sp_port->local_port);
@@ -2937,7 +2979,7 @@ static void mlxsw_sp_port_vlan_unlink(struct mlxsw_sp_port *mlxsw_sp_port,
 		struct net_device *br_dev;
 
 		br_dev = mlxsw_sp_vport_br_get(mlxsw_sp_vport);
-		mlxsw_sp_vport_bridge_leave(mlxsw_sp_vport);
+		mlxsw_sp_vport_bridge_leave(mlxsw_sp_vport, true);
 	}
 
 	mlxsw_sp_vport->dev = mlxsw_sp_port->dev;
@@ -2993,7 +3035,7 @@ static int mlxsw_sp_netdevice_port_upper_event(struct net_device *dev,
 				err = mlxsw_sp_port_bridge_join(mlxsw_sp_port,
 								upper_dev);
 			else
-				mlxsw_sp_port_bridge_leave(mlxsw_sp_port);
+				mlxsw_sp_port_bridge_leave(mlxsw_sp_port, true);
 		} else if (netif_is_lag_master(upper_dev)) {
 			if (info->linking)
 				err = mlxsw_sp_port_lag_join(mlxsw_sp_port,
@@ -3191,8 +3233,6 @@ static void mlxsw_sp_vport_br_vfid_leave(struct mlxsw_sp_port *mlxsw_sp_vport)
 
 	mlxsw_sp_vport_flood_set(mlxsw_sp_vport, f->fid, false);
 
-	mlxsw_sp_port_fdb_flush(mlxsw_sp_vport, f->fid);
-
 	mlxsw_sp_vport_fid_set(mlxsw_sp_vport, NULL);
 	if (--f->ref_count == 0)
 		mlxsw_sp_br_vfid_destroy(mlxsw_sp_vport->mlxsw_sp, f);
@@ -3233,8 +3273,10 @@ err_vport_br_vfid_join:
 	return err;
 }
 
-static void mlxsw_sp_vport_bridge_leave(struct mlxsw_sp_port *mlxsw_sp_vport)
+static void mlxsw_sp_vport_bridge_leave(struct mlxsw_sp_port *mlxsw_sp_vport,
+					bool flush_fdb)
 {
+	u16 fid = mlxsw_sp_vport_fid_get(mlxsw_sp_vport)->fid;
 	u16 vid = mlxsw_sp_vport_vid_get(mlxsw_sp_vport);
 
 	mlxsw_sp_port_vid_learning_set(mlxsw_sp_vport, vid, false);
@@ -3245,6 +3287,9 @@ static void mlxsw_sp_vport_bridge_leave(struct mlxsw_sp_port *mlxsw_sp_vport)
 
 	mlxsw_sp_port_stp_state_set(mlxsw_sp_vport, vid,
 				    MLXSW_REG_SPMS_STATE_FORWARDING);
+
+	if (flush_fdb)
+		mlxsw_sp_vport_fdb_flush(mlxsw_sp_vport, fid);
 
 	mlxsw_sp_vport->learning = 0;
 	mlxsw_sp_vport->learning_sync = 0;
@@ -3309,7 +3354,7 @@ static int mlxsw_sp_netdevice_vport_event(struct net_device *dev,
 			 */
 			if (!mlxsw_sp_vport)
 				return 0;
-			mlxsw_sp_vport_bridge_leave(mlxsw_sp_vport);
+			mlxsw_sp_vport_bridge_leave(mlxsw_sp_vport, true);
 		}
 	}
 
