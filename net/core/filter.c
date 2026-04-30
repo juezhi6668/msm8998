@@ -1856,15 +1856,14 @@ BPF_CALL_4(bpf_sk_redirect_map, struct sk_buff *, skb,
 {
 	struct tcp_skb_cb *tcb = TCP_SKB_CB(skb);
 
-	/* If user passes invalid input drop the packet. */
 	if (unlikely(flags))
-		return SK_DROP;
+		return SK_ABORTED;
 
 	tcb->bpf.key = key;
 	tcb->bpf.flags = flags;
 	tcb->bpf.map = map;
 
-	return SK_PASS;
+	return SK_REDIRECT;
 }
 
 struct sock *do_sk_redirect_map(struct sk_buff *skb)
