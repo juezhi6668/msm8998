@@ -1400,8 +1400,7 @@ int mlxsw_sp_port_vlan_init(struct mlxsw_sp_port *mlxsw_sp_port)
 	 * with VID 1.
 	 */
 	mlxsw_sp_port->pvid = 1;
-	err = __mlxsw_sp_port_vlans_del(mlxsw_sp_port, 0, VLAN_N_VID - 1,
-					true);
+	err = __mlxsw_sp_port_vlans_del(mlxsw_sp_port, 0, VLAN_N_VID, true);
 	if (err) {
 		netdev_err(dev, "Unable to init VLANs\n");
 		return err;
