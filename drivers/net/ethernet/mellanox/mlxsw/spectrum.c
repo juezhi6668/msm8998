@@ -750,16 +750,6 @@ static void mlxsw_sp_port_vport_destroy(struct mlxsw_sp_port *mlxsw_sp_vport)
 	kfree(mlxsw_sp_vport);
 }
 
-static int mlxsw_sp_vport_fid_map(struct mlxsw_sp_port *mlxsw_sp_vport, u16 fid,
-				  bool valid)
-{
-	enum mlxsw_reg_svfa_mt mt = MLXSW_REG_SVFA_MT_PORT_VID_TO_FID;
-	u16 vid = mlxsw_sp_vport_vid_get(mlxsw_sp_vport);
-
-	return mlxsw_sp_port_vid_to_fid_set(mlxsw_sp_vport, mt, valid, fid,
-					    vid);
-}
-
 int mlxsw_sp_port_add_vid(struct net_device *dev, __be16 __always_unused proto,
 			  u16 vid)
 {
@@ -767,7 +757,6 @@ int mlxsw_sp_port_add_vid(struct net_device *dev, __be16 __always_unused proto,
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
 	struct mlxsw_sp_port *mlxsw_sp_vport;
 	struct mlxsw_sp_vfid *vfid;
-	u16 fid;
 	int err;
 
 	/* VLAN 0 is added to HW filter when device goes up, but it is
@@ -820,12 +809,15 @@ int mlxsw_sp_port_add_vid(struct net_device *dev, __be16 __always_unused proto,
 		}
 	}
 
-	fid = mlxsw_sp_vfid_to_fid(vfid->vfid);
-	err = mlxsw_sp_vport_fid_map(mlxsw_sp_vport, fid, true);
+	err = mlxsw_sp_port_vid_to_fid_set(mlxsw_sp_vport,
+					   MLXSW_REG_SVFA_MT_PORT_VID_TO_FID,
+					   true,
+					   mlxsw_sp_vfid_to_fid(vfid->vfid),
+					   vid);
 	if (err) {
 		netdev_err(dev, "Failed to map {Port, VID=%d} to vFID=%d\n",
 			   vid, vfid->vfid);
-		goto err_vport_fid_map;
+		goto err_port_vid_to_fid_set;
 	}
 
 	err = mlxsw_sp_port_vid_learning_set(mlxsw_sp_vport, vid, false);
@@ -857,8 +849,10 @@ err_port_stp_state_set:
 err_port_add_vid:
 	mlxsw_sp_port_vid_learning_set(mlxsw_sp_vport, vid, true);
 err_port_vid_learning_set:
-	mlxsw_sp_vport_fid_map(mlxsw_sp_vport, fid, false);
-err_vport_fid_map:
+	mlxsw_sp_port_vid_to_fid_set(mlxsw_sp_vport,
+				     MLXSW_REG_SVFA_MT_PORT_VID_TO_FID, false,
+				     mlxsw_sp_vfid_to_fid(vfid->vfid), vid);
+err_port_vid_to_fid_set:
 	if (list_is_singular(&mlxsw_sp_port->vports_list))
 		mlxsw_sp_port_vlan_mode_trans(mlxsw_sp_port);
 err_port_vp_mode_trans:
@@ -878,7 +872,6 @@ int mlxsw_sp_port_kill_vid(struct net_device *dev,
 	struct mlxsw_sp_port *mlxsw_sp_port = netdev_priv(dev);
 	struct mlxsw_sp_port *mlxsw_sp_vport;
 	struct mlxsw_sp_vfid *vfid;
-	u16 fid;
 	int err;
 
 	/* VLAN 0 is removed from HW filter when device goes down, but
@@ -915,8 +908,11 @@ int mlxsw_sp_port_kill_vid(struct net_device *dev,
 		return err;
 	}
 
-	fid = mlxsw_sp_vfid_to_fid(vfid->vfid);
-	err = mlxsw_sp_vport_fid_map(mlxsw_sp_vport, fid, false);
+	err = mlxsw_sp_port_vid_to_fid_set(mlxsw_sp_vport,
+					   MLXSW_REG_SVFA_MT_PORT_VID_TO_FID,
+					   false,
+					   mlxsw_sp_vfid_to_fid(vfid->vfid),
+					   vid);
 	if (err) {
 		netdev_err(dev, "Failed to invalidate {Port, VID=%d} to vFID=%d mapping\n",
 			   vid, vfid->vfid);
@@ -3199,7 +3195,6 @@ static void mlxsw_sp_vport_bridge_leave(struct mlxsw_sp_port *mlxsw_sp_vport,
 	u16 vid = mlxsw_sp_vport_vid_get(mlxsw_sp_vport);
 	struct net_device *dev = mlxsw_sp_vport->dev;
 	struct mlxsw_sp_vfid *vfid, *new_vfid;
-	u16 fid, new_fid;
 	int err;
 
 	vfid = mlxsw_sp_br_vfid_find(mlxsw_sp, br_dev);
@@ -3220,20 +3215,26 @@ static void mlxsw_sp_vport_bridge_leave(struct mlxsw_sp_port *mlxsw_sp_vport,
 	/* Invalidate existing {Port, VID} to vFID mapping and create a new
 	 * one for the new vFID.
 	 */
-	fid = mlxsw_sp_vfid_to_fid(vfid->vfid);
-	err = mlxsw_sp_vport_fid_map(mlxsw_sp_vport, fid, false);
+	err = mlxsw_sp_port_vid_to_fid_set(mlxsw_sp_vport,
+					   MLXSW_REG_SVFA_MT_PORT_VID_TO_FID,
+					   false,
+					   mlxsw_sp_vfid_to_fid(vfid->vfid),
+					   vid);
 	if (err) {
 		netdev_err(dev, "Failed to invalidate {Port, VID} to vFID=%d mapping\n",
 			   vfid->vfid);
-		goto err_vport_fid_unmap;
+		goto err_port_vid_to_fid_invalidate;
 	}
 
-	new_fid = mlxsw_sp_vfid_to_fid(new_vfid->vfid);
-	err = mlxsw_sp_vport_fid_map(mlxsw_sp_vport, new_fid, true);
+	err = mlxsw_sp_port_vid_to_fid_set(mlxsw_sp_vport,
+					   MLXSW_REG_SVFA_MT_PORT_VID_TO_FID,
+					   true,
+					   mlxsw_sp_vfid_to_fid(new_vfid->vfid),
+					   vid);
 	if (err) {
 		netdev_err(dev, "Failed to map {Port, VID} to vFID=%d\n",
 			   new_vfid->vfid);
-		goto err_vport_fid_map;
+		goto err_port_vid_to_fid_validate;
 	}
 
 	err = mlxsw_sp_port_vid_learning_set(mlxsw_sp_vport, vid, false);
@@ -3275,8 +3276,8 @@ static void mlxsw_sp_vport_bridge_leave(struct mlxsw_sp_port *mlxsw_sp_vport,
 err_port_stp_state_set:
 err_vport_flood_set:
 err_port_vid_learning_set:
-err_vport_fid_map:
-err_vport_fid_unmap:
+err_port_vid_to_fid_validate:
+err_port_vid_to_fid_invalidate:
 	/* Rollback vFID only if new. */
 	if (!new_vfid->nr_vports)
 		mlxsw_sp_vfid_destroy(mlxsw_sp, new_vfid);
@@ -3290,7 +3291,6 @@ static int mlxsw_sp_vport_bridge_join(struct mlxsw_sp_port *mlxsw_sp_vport,
 	u16 vid = mlxsw_sp_vport_vid_get(mlxsw_sp_vport);
 	struct net_device *dev = mlxsw_sp_vport->dev;
 	struct mlxsw_sp_vfid *vfid;
-	u16 fid, old_fid;
 	int err;
 
 	vfid = mlxsw_sp_br_vfid_find(mlxsw_sp, br_dev);
@@ -3318,20 +3318,26 @@ static int mlxsw_sp_vport_bridge_join(struct mlxsw_sp_port *mlxsw_sp_vport,
 	/* We need to invalidate existing {Port, VID} to vFID mapping and
 	 * create a new one for the bridge's vFID.
 	 */
-	old_fid = mlxsw_sp_vfid_to_fid(old_vfid->vfid);
-	err = mlxsw_sp_vport_fid_map(mlxsw_sp_vport, old_fid, false);
+	err = mlxsw_sp_port_vid_to_fid_set(mlxsw_sp_vport,
+					   MLXSW_REG_SVFA_MT_PORT_VID_TO_FID,
+					   false,
+					   mlxsw_sp_vfid_to_fid(old_vfid->vfid),
+					   vid);
 	if (err) {
 		netdev_err(dev, "Failed to invalidate {Port, VID} to vFID=%d mapping\n",
 			   old_vfid->vfid);
-		goto err_vport_fid_unmap;
+		goto err_port_vid_to_fid_invalidate;
 	}
 
-	fid = mlxsw_sp_vfid_to_fid(vfid->vfid);
-	err = mlxsw_sp_vport_fid_map(mlxsw_sp_vport, fid, true);
+	err = mlxsw_sp_port_vid_to_fid_set(mlxsw_sp_vport,
+					   MLXSW_REG_SVFA_MT_PORT_VID_TO_FID,
+					   true,
+					   mlxsw_sp_vfid_to_fid(vfid->vfid),
+					   vid);
 	if (err) {
 		netdev_err(dev, "Failed to map {Port, VID} to vFID=%d\n",
 			   vfid->vfid);
-		goto err_vport_fid_map;
+		goto err_port_vid_to_fid_validate;
 	}
 
 	/* Switch between the vFIDs and destroy the old one if needed. */
@@ -3348,9 +3354,11 @@ static int mlxsw_sp_vport_bridge_join(struct mlxsw_sp_port *mlxsw_sp_vport,
 
 	return 0;
 
-err_vport_fid_map:
-	mlxsw_sp_vport_fid_map(mlxsw_sp_vport, old_fid, true);
-err_vport_fid_unmap:
+err_port_vid_to_fid_validate:
+	mlxsw_sp_port_vid_to_fid_set(mlxsw_sp_vport,
+				     MLXSW_REG_SVFA_MT_PORT_VID_TO_FID, false,
+				     mlxsw_sp_vfid_to_fid(old_vfid->vfid), vid);
+err_port_vid_to_fid_invalidate:
 	mlxsw_sp_port_vid_learning_set(mlxsw_sp_vport, vid, false);
 err_port_vid_learning_set:
 	mlxsw_sp_vport_flood_set(mlxsw_sp_vport, vfid->vfid, false);
