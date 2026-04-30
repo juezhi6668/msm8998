@@ -44,6 +44,7 @@
 #include <linux/list.h>
 #include <linux/dcbnl.h>
 #include <net/switchdev.h>
+#include <net/devlink.h>
 
 #include "port.h"
 #include "core.h"
@@ -165,7 +166,6 @@ struct mlxsw_sp_port_pcpu_stats {
 };
 
 struct mlxsw_sp_port {
-	struct mlxsw_core_port core_port; /* must be first */
 	struct net_device *dev;
 	struct mlxsw_sp_port_pcpu_stats __percpu *pcpu_stats;
 	struct mlxsw_sp *mlxsw_sp;
@@ -198,6 +198,7 @@ struct mlxsw_sp_port {
 	unsigned long *untagged_vlans;
 	/* VLAN interfaces */
 	struct list_head vports_list;
+	struct devlink_port devlink_port;
 };
 
 static inline bool
