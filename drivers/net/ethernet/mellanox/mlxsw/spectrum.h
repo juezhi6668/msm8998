@@ -259,6 +259,12 @@ mlxsw_sp_port_lagged_get(struct mlxsw_sp *mlxsw_sp, u16 lag_id, u8 port_index)
 	return mlxsw_sp_port && mlxsw_sp_port->lagged ? mlxsw_sp_port : NULL;
 }
 
+static inline struct net_device *
+mlxsw_sp_vport_br_get(const struct mlxsw_sp_port *mlxsw_sp_vport)
+{
+	return mlxsw_sp_vport->vport.f->dev;
+}
+
 static inline u16
 mlxsw_sp_vport_vid_get(const struct mlxsw_sp_port *mlxsw_sp_vport)
 {
@@ -273,24 +279,10 @@ mlxsw_sp_port_is_vport(const struct mlxsw_sp_port *mlxsw_sp_port)
 	return vid != 0;
 }
 
-static inline void mlxsw_sp_vport_fid_set(struct mlxsw_sp_port *mlxsw_sp_vport,
-					  struct mlxsw_sp_fid *f)
-{
-	mlxsw_sp_vport->vport.f = f;
-}
-
-static inline struct mlxsw_sp_fid *
+static inline u16
 mlxsw_sp_vport_fid_get(const struct mlxsw_sp_port *mlxsw_sp_vport)
 {
-	return mlxsw_sp_vport->vport.f;
-}
-
-static inline struct net_device *
-mlxsw_sp_vport_br_get(const struct mlxsw_sp_port *mlxsw_sp_vport)
-{
-	struct mlxsw_sp_fid *f = mlxsw_sp_vport_fid_get(mlxsw_sp_vport);
-
-	return f->dev;
+	return mlxsw_sp_vport->vport.f->fid;
 }
 
 static inline struct mlxsw_sp_port *
@@ -315,9 +307,7 @@ mlxsw_sp_port_vport_find_by_fid(const struct mlxsw_sp_port *mlxsw_sp_port,
 
 	list_for_each_entry(mlxsw_sp_vport, &mlxsw_sp_port->vports_list,
 			    vport.list) {
-		struct mlxsw_sp_fid *f = mlxsw_sp_vport_fid_get(mlxsw_sp_vport);
-
-		if (f->fid == fid)
+		if (mlxsw_sp_vport_fid_get(mlxsw_sp_vport) == fid)
 			return mlxsw_sp_vport;
 	}
 
