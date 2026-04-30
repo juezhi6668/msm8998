@@ -981,29 +981,6 @@ static void mlxsw_sp_port_get_strings(struct net_device *dev,
 	}
 }
 
-static int mlxsw_sp_port_set_phys_id(struct net_device *dev,
-				     enum ethtool_phys_id_state state)
-{
-	struct mlxsw_sp_port *mlxsw_sp_port = netdev_priv(dev);
-	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
-	char mlcr_pl[MLXSW_REG_MLCR_LEN];
-	bool active;
-
-	switch (state) {
-	case ETHTOOL_ID_ACTIVE:
-		active = true;
-		break;
-	case ETHTOOL_ID_INACTIVE:
-		active = false;
-		break;
-	default:
-		return -EOPNOTSUPP;
-	}
-
-	mlxsw_reg_mlcr_pack(mlcr_pl, mlxsw_sp_port->local_port, active);
-	return mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(mlcr), mlcr_pl);
-}
-
 static void mlxsw_sp_port_get_stats(struct net_device *dev,
 				    struct ethtool_stats *stats, u64 *data)
 {
@@ -1360,7 +1337,6 @@ static const struct ethtool_ops mlxsw_sp_port_ethtool_ops = {
 	.get_pauseparam		= mlxsw_sp_port_get_pauseparam,
 	.set_pauseparam		= mlxsw_sp_port_set_pauseparam,
 	.get_strings		= mlxsw_sp_port_get_strings,
-	.set_phys_id		= mlxsw_sp_port_set_phys_id,
 	.get_ethtool_stats	= mlxsw_sp_port_get_stats,
 	.get_sset_count		= mlxsw_sp_port_get_sset_count,
 	.get_settings		= mlxsw_sp_port_get_settings,
