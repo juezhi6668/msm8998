@@ -556,15 +556,15 @@ static int mlxsw_sp_port_vlans_add(struct mlxsw_sp_port *mlxsw_sp_port,
 				   const struct switchdev_obj_port_vlan *vlan,
 				   struct switchdev_trans *trans)
 {
-	bool flag_untagged = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
-	bool flag_pvid = vlan->flags & BRIDGE_VLAN_INFO_PVID;
+	bool untagged_flag = vlan->flags & BRIDGE_VLAN_INFO_UNTAGGED;
+	bool pvid_flag = vlan->flags & BRIDGE_VLAN_INFO_PVID;
 
 	if (switchdev_trans_ph_prepare(trans))
 		return 0;
 
 	return __mlxsw_sp_port_vlans_add(mlxsw_sp_port,
 					 vlan->vid_begin, vlan->vid_end,
-					 flag_untagged, flag_pvid);
+					 untagged_flag, pvid_flag);
 }
 
 static enum mlxsw_reg_sfd_rec_policy mlxsw_sp_sfd_rec_policy(bool dynamic)
