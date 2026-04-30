@@ -602,8 +602,8 @@ static int mlxsw_sp_port_fdb_uc_op(struct mlxsw_sp_port *mlxsw_sp_port,
 }
 
 static int mlxsw_sp_port_fdb_uc_lag_op(struct mlxsw_sp *mlxsw_sp, u16 lag_id,
-				       const char *mac, u16 fid, u16 lag_vid,
-				       bool adding, bool dynamic)
+				       const char *mac, u16 fid, bool adding,
+				       bool dynamic)
 {
 	char *sfd_pl;
 	int err;
@@ -614,8 +614,8 @@ static int mlxsw_sp_port_fdb_uc_lag_op(struct mlxsw_sp *mlxsw_sp, u16 lag_id,
 
 	mlxsw_reg_sfd_pack(sfd_pl, mlxsw_sp_sfd_op(adding), 0);
 	mlxsw_reg_sfd_uc_lag_pack(sfd_pl, 0, mlxsw_sp_sfd_rec_policy(dynamic),
-				  mac, fid, MLXSW_REG_SFD_REC_ACTION_NOP,
-				  lag_vid, lag_id);
+				  mac, fid, MLXSW_REG_SFD_REC_ACTION_NOP, 0,
+				  lag_id);
 	err = mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(sfd), sfd_pl);
 	kfree(sfd_pl);
 
@@ -628,7 +628,6 @@ mlxsw_sp_port_fdb_static_add(struct mlxsw_sp_port *mlxsw_sp_port,
 			     struct switchdev_trans *trans)
 {
 	u16 fid = fdb->vid;
-	u16 lag_vid = 0;
 
 	if (switchdev_trans_ph_prepare(trans))
 		return 0;
@@ -637,7 +636,6 @@ mlxsw_sp_port_fdb_static_add(struct mlxsw_sp_port *mlxsw_sp_port,
 		u16 vfid = mlxsw_sp_vport_vfid_get(mlxsw_sp_port);
 
 		fid = mlxsw_sp_vfid_to_fid(vfid);
-		lag_vid = mlxsw_sp_vport_vid_get(mlxsw_sp_port);
 	}
 
 	if (!fid)
@@ -649,8 +647,7 @@ mlxsw_sp_port_fdb_static_add(struct mlxsw_sp_port *mlxsw_sp_port,
 	else
 		return mlxsw_sp_port_fdb_uc_lag_op(mlxsw_sp_port->mlxsw_sp,
 						   mlxsw_sp_port->lag_id,
-						   fdb->addr, fid, lag_vid,
-						   true, false);
+						   fdb->addr, fid, true, false);
 }
 
 static int mlxsw_sp_port_mdb_op(struct mlxsw_sp *mlxsw_sp, const char *addr,
@@ -923,13 +920,11 @@ mlxsw_sp_port_fdb_static_del(struct mlxsw_sp_port *mlxsw_sp_port,
 			     const struct switchdev_obj_port_fdb *fdb)
 {
 	u16 fid = fdb->vid;
-	u16 lag_vid = 0;
 
 	if (mlxsw_sp_port_is_vport(mlxsw_sp_port)) {
 		u16 vfid = mlxsw_sp_vport_vfid_get(mlxsw_sp_port);
 
 		fid = mlxsw_sp_vfid_to_fid(vfid);
-		lag_vid = mlxsw_sp_vport_vid_get(mlxsw_sp_port);
 	}
 
 	if (!mlxsw_sp_port->lagged)
@@ -939,7 +934,7 @@ mlxsw_sp_port_fdb_static_del(struct mlxsw_sp_port *mlxsw_sp_port,
 	else
 		return mlxsw_sp_port_fdb_uc_lag_op(mlxsw_sp_port->mlxsw_sp,
 						   mlxsw_sp_port->lag_id,
-						   fdb->addr, fid, lag_vid,
+						   fdb->addr, fid,
 						   false, false);
 }
 
@@ -1244,7 +1239,6 @@ static void mlxsw_sp_fdb_notify_mac_lag_process(struct mlxsw_sp *mlxsw_sp,
 {
 	struct mlxsw_sp_port *mlxsw_sp_port;
 	char mac[ETH_ALEN];
-	u16 lag_vid = 0;
 	u16 lag_id;
 	u16 vid, fid;
 	int err;
@@ -1268,14 +1262,13 @@ static void mlxsw_sp_fdb_notify_mac_lag_process(struct mlxsw_sp *mlxsw_sp,
 		}
 
 		vid = mlxsw_sp_vport_vid_get(mlxsw_sp_vport);
-		lag_vid = vid;
 		/* Override the physical port with the vPort. */
 		mlxsw_sp_port = mlxsw_sp_vport;
 	} else {
 		vid = fid;
 	}
 
-	err = mlxsw_sp_port_fdb_uc_lag_op(mlxsw_sp, lag_id, mac, fid, lag_vid,
+	err = mlxsw_sp_port_fdb_uc_lag_op(mlxsw_sp, lag_id, mac, fid,
 					  adding && mlxsw_sp_port->learning,
 					  true);
 	if (err) {
