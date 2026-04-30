@@ -2962,8 +2962,10 @@ static int mlxsw_sp_port_vlan_link(struct mlxsw_sp_port *mlxsw_sp_port,
 	u16 vid = vlan_dev_vlan_id(vlan_dev);
 
 	mlxsw_sp_vport = mlxsw_sp_port_vport_find(mlxsw_sp_port, vid);
-	if (WARN_ON(!mlxsw_sp_vport))
+	if (!mlxsw_sp_vport) {
+		WARN_ON(!mlxsw_sp_vport);
 		return -EINVAL;
+	}
 
 	mlxsw_sp_vport->dev = vlan_dev;
 
@@ -2977,8 +2979,10 @@ static int mlxsw_sp_port_vlan_unlink(struct mlxsw_sp_port *mlxsw_sp_port,
 	u16 vid = vlan_dev_vlan_id(vlan_dev);
 
 	mlxsw_sp_vport = mlxsw_sp_port_vport_find(mlxsw_sp_port, vid);
-	if (WARN_ON(!mlxsw_sp_vport))
+	if (!mlxsw_sp_vport) {
+		WARN_ON(!mlxsw_sp_vport);
 		return -EINVAL;
+	}
 
 	/* When removing a VLAN device while still bridged we should first
 	 * remove it from the bridge, as we receive the bridge's notification
@@ -3214,8 +3218,10 @@ static int mlxsw_sp_vport_bridge_leave(struct mlxsw_sp_port *mlxsw_sp_vport,
 	int err;
 
 	vfid = mlxsw_sp_br_vfid_find(mlxsw_sp, br_dev);
-	if (WARN_ON(!vfid))
+	if (!vfid) {
+		WARN_ON(!vfid);
 		return -EINVAL;
+	}
 
 	/* We need a vFID to go back to after leaving the bridge's vFID. */
 	new_vfid = mlxsw_sp_vfid_find(mlxsw_sp, vid);
@@ -3430,8 +3436,10 @@ static int mlxsw_sp_netdevice_vport_event(struct net_device *dev,
 	case NETDEV_CHANGEUPPER:
 		upper_dev = info->upper_dev;
 		if (info->linking) {
-			if (WARN_ON(!mlxsw_sp_vport))
+			if (!mlxsw_sp_vport) {
+				WARN_ON(!mlxsw_sp_vport);
 				return -EINVAL;
+			}
 			err = mlxsw_sp_vport_bridge_join(mlxsw_sp_vport,
 							 upper_dev);
 		} else {
