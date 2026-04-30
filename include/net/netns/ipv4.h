@@ -100,7 +100,6 @@ struct netns_ipv4 {
 	int sysctl_tcp_keepalive_intvl;
 
 	int sysctl_tcp_syn_retries;
-	int sysctl_tcp_synack_retries;
 
 	int sysctl_tcp_default_init_rwnd;
 
