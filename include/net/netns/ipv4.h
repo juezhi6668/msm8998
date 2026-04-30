@@ -95,8 +95,6 @@ struct netns_ipv4 {
 	int sysctl_tcp_probe_threshold;
 	u32 sysctl_tcp_probe_interval;
 
-	int sysctl_tcp_keepalive_time;
-
 	int sysctl_tcp_default_init_rwnd;
 
 #ifdef CONFIG_NET_L3_MASTER_DEV
