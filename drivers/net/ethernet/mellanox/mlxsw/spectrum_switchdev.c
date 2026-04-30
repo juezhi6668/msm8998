@@ -366,6 +366,18 @@ static int mlxsw_sp_port_attr_set(struct net_device *dev,
 	return err;
 }
 
+static struct mlxsw_sp_fid *mlxsw_sp_fid_find(struct mlxsw_sp *mlxsw_sp,
+					      u16 fid)
+{
+	struct mlxsw_sp_fid *f;
+
+	list_for_each_entry(f, &mlxsw_sp->fids, list)
+		if (f->fid == fid)
+			return f;
+
+	return NULL;
+}
+
 static int mlxsw_sp_fid_op(struct mlxsw_sp *mlxsw_sp, u16 fid, bool create)
 {
 	char sfmr_pl[MLXSW_REG_SFMR_LEN];
@@ -396,7 +408,8 @@ static struct mlxsw_sp_fid *mlxsw_sp_fid_alloc(u16 fid)
 	return f;
 }
 
-struct mlxsw_sp_fid *mlxsw_sp_fid_create(struct mlxsw_sp *mlxsw_sp, u16 fid)
+static struct mlxsw_sp_fid *mlxsw_sp_fid_create(struct mlxsw_sp *mlxsw_sp,
+						u16 fid)
 {
 	struct mlxsw_sp_fid *f;
 	int err;
@@ -431,7 +444,8 @@ err_fid_map:
 	return ERR_PTR(err);
 }
 
-void mlxsw_sp_fid_destroy(struct mlxsw_sp *mlxsw_sp, struct mlxsw_sp_fid *f)
+static void mlxsw_sp_fid_destroy(struct mlxsw_sp *mlxsw_sp,
+				 struct mlxsw_sp_fid *f)
 {
 	u16 fid = f->fid;
 
