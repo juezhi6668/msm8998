@@ -99,8 +99,6 @@ struct netns_ipv4 {
 	int sysctl_tcp_keepalive_probes;
 	int sysctl_tcp_keepalive_intvl;
 
-	int sysctl_tcp_syn_retries;
-
 	int sysctl_tcp_default_init_rwnd;
 
 #ifdef CONFIG_NET_L3_MASTER_DEV
