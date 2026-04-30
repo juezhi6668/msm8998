@@ -181,7 +181,6 @@ static int mlxsw_sp_port_headroom_init(struct mlxsw_sp_port *mlxsw_sp_port)
 
 #define MLXSW_SP_SB_PR_INGRESS_SIZE				\
 	(15000000 - (2 * 20000 * MLXSW_PORT_MAX_PORTS))
-#define MLXSW_SP_SB_PR_INGRESS_MNG_SIZE (200 * 1000)
 #define MLXSW_SP_SB_PR_EGRESS_SIZE				\
 	(14000000 - (8 * 1500 * MLXSW_PORT_MAX_PORTS))
 
@@ -196,8 +195,7 @@ static const struct mlxsw_sp_sb_pr mlxsw_sp_sb_prs_ingress[] = {
 		       MLXSW_SP_BYTES_TO_CELLS(MLXSW_SP_SB_PR_INGRESS_SIZE)),
 	MLXSW_SP_SB_PR(MLXSW_REG_SBPR_MODE_DYNAMIC, 0),
 	MLXSW_SP_SB_PR(MLXSW_REG_SBPR_MODE_DYNAMIC, 0),
-	MLXSW_SP_SB_PR(MLXSW_REG_SBPR_MODE_DYNAMIC,
-		       MLXSW_SP_BYTES_TO_CELLS(MLXSW_SP_SB_PR_INGRESS_MNG_SIZE)),
+	MLXSW_SP_SB_PR(MLXSW_REG_SBPR_MODE_DYNAMIC, 0),
 };
 
 #define MLXSW_SP_SB_PRS_INGRESS_LEN ARRAY_SIZE(mlxsw_sp_sb_prs_ingress)
@@ -263,7 +261,7 @@ static const struct mlxsw_sp_sb_cm mlxsw_sp_sb_cms_ingress[] = {
 	MLXSW_SP_SB_CM(0, 0, 0),
 	MLXSW_SP_SB_CM(0, 0, 0),
 	MLXSW_SP_SB_CM(0, 0, 0), /* dummy, this PG does not exist */
-	MLXSW_SP_SB_CM(MLXSW_SP_BYTES_TO_CELLS(20000), 1, 3),
+	MLXSW_SP_SB_CM(MLXSW_SP_BYTES_TO_CELLS(20000), 0xff, 0),
 };
 
 #define MLXSW_SP_SB_CMS_INGRESS_LEN ARRAY_SIZE(mlxsw_sp_sb_cms_ingress)
@@ -388,7 +386,7 @@ static const struct mlxsw_sp_sb_pm mlxsw_sp_sb_pms_ingress[] = {
 	MLXSW_SP_SB_PM(0, 0xff),
 	MLXSW_SP_SB_PM(0, 0),
 	MLXSW_SP_SB_PM(0, 0),
-	MLXSW_SP_SB_PM(0, 0xff),
+	MLXSW_SP_SB_PM(0, 0),
 };
 
 #define MLXSW_SP_SB_PMS_INGRESS_LEN ARRAY_SIZE(mlxsw_sp_sb_pms_ingress)
