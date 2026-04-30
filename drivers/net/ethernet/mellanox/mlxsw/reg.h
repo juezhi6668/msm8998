@@ -2483,7 +2483,7 @@ static inline void mlxsw_reg_pptb_pack(char *payload, u8 local_port)
  * allocation for different Prios, and the Pause threshold management.
  */
 #define MLXSW_REG_PBMC_ID 0x500C
-#define MLXSW_REG_PBMC_LEN 0x6C
+#define MLXSW_REG_PBMC_LEN 0x68
 
 static const struct mlxsw_reg_info mlxsw_reg_pbmc = {
 	.id = MLXSW_REG_PBMC_ID,
