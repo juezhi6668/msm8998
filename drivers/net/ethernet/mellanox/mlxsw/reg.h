@@ -3476,10 +3476,9 @@ static const struct mlxsw_reg_info mlxsw_reg_sbpr = {
 	.len = MLXSW_REG_SBPR_LEN,
 };
 
-/* shared direstion enum for SBPR, SBCM, SBPM */
-enum mlxsw_reg_sbxx_dir {
-	MLXSW_REG_SBXX_DIR_INGRESS,
-	MLXSW_REG_SBXX_DIR_EGRESS,
+enum mlxsw_reg_sbpr_dir {
+	MLXSW_REG_SBPR_DIR_INGRESS,
+	MLXSW_REG_SBPR_DIR_EGRESS,
 };
 
 /* reg_sbpr_dir
@@ -3512,7 +3511,7 @@ enum mlxsw_reg_sbpr_mode {
 MLXSW_ITEM32(reg, sbpr, mode, 0x08, 0, 4);
 
 static inline void mlxsw_reg_sbpr_pack(char *payload, u8 pool,
-				       enum mlxsw_reg_sbxx_dir dir,
+				       enum mlxsw_reg_sbpr_dir dir,
 				       enum mlxsw_reg_sbpr_mode mode, u32 size)
 {
 	MLXSW_REG_ZERO(sbpr, payload);
@@ -3554,6 +3553,11 @@ MLXSW_ITEM32(reg, sbcm, local_port, 0x00, 16, 8);
  */
 MLXSW_ITEM32(reg, sbcm, pg_buff, 0x00, 8, 6);
 
+enum mlxsw_reg_sbcm_dir {
+	MLXSW_REG_SBCM_DIR_INGRESS,
+	MLXSW_REG_SBCM_DIR_EGRESS,
+};
+
 /* reg_sbcm_dir
  * Direction.
  * Access: Index
@@ -3586,7 +3590,7 @@ MLXSW_ITEM32(reg, sbcm, max_buff, 0x1C, 0, 24);
 MLXSW_ITEM32(reg, sbcm, pool, 0x24, 0, 4);
 
 static inline void mlxsw_reg_sbcm_pack(char *payload, u8 local_port, u8 pg_buff,
-				       enum mlxsw_reg_sbxx_dir dir,
+				       enum mlxsw_reg_sbcm_dir dir,
 				       u32 min_buff, u32 max_buff, u8 pool)
 {
 	MLXSW_REG_ZERO(sbcm, payload);
@@ -3626,6 +3630,11 @@ MLXSW_ITEM32(reg, sbpm, local_port, 0x00, 16, 8);
  */
 MLXSW_ITEM32(reg, sbpm, pool, 0x00, 8, 4);
 
+enum mlxsw_reg_sbpm_dir {
+	MLXSW_REG_SBPM_DIR_INGRESS,
+	MLXSW_REG_SBPM_DIR_EGRESS,
+};
+
 /* reg_sbpm_dir
  * Direction.
  * Access: Index
@@ -3652,7 +3661,7 @@ MLXSW_ITEM32(reg, sbpm, min_buff, 0x18, 0, 24);
 MLXSW_ITEM32(reg, sbpm, max_buff, 0x1C, 0, 24);
 
 static inline void mlxsw_reg_sbpm_pack(char *payload, u8 local_port, u8 pool,
-				       enum mlxsw_reg_sbxx_dir dir,
+				       enum mlxsw_reg_sbpm_dir dir,
 				       u32 min_buff, u32 max_buff)
 {
 	MLXSW_REG_ZERO(sbpm, payload);
