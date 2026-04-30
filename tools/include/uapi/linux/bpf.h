@@ -116,6 +116,7 @@ enum bpf_map_type {
 	BPF_MAP_TYPE_PERCPU_ARRAY,
 	BPF_MAP_TYPE_STACK_TRACE,
 <<<<<<< HEAD
+<<<<<<< HEAD
 	BPF_MAP_TYPE_CGROUP_ARRAY,
 	BPF_MAP_TYPE_LRU_HASH,
 	BPF_MAP_TYPE_LRU_PERCPU_HASH,
@@ -125,6 +126,9 @@ enum bpf_map_type {
 	BPF_MAP_TYPE_DEVMAP,
 =======
 >>>>>>> 971e827bffef... tools lib bpf: Copy bpf.h and bpf_common.h from the kernel
+=======
+	BPF_MAP_TYPE_CGROUP_ARRAY,
+>>>>>>> 791cceb89f79... toops: Sync tools/include/uapi/linux/bpf.h with the kernel
 };
 
 enum bpf_prog_type {
@@ -134,6 +138,7 @@ enum bpf_prog_type {
 	BPF_PROG_TYPE_SCHED_CLS,
 	BPF_PROG_TYPE_SCHED_ACT,
 	BPF_PROG_TYPE_TRACEPOINT,
+<<<<<<< HEAD
 <<<<<<< HEAD
 	BPF_PROG_TYPE_XDP,
 	BPF_PROG_TYPE_PERF_EVENT,
@@ -153,6 +158,9 @@ enum bpf_attach_type {
 	BPF_SK_SKB_STREAM_PARSER,
 	BPF_SK_SKB_STREAM_VERDICT,
 	__MAX_BPF_ATTACH_TYPE
+=======
+	BPF_PROG_TYPE_XDP,
+>>>>>>> 791cceb89f79... toops: Sync tools/include/uapi/linux/bpf.h with the kernel
 };
 
 #define MAX_BPF_ATTACH_TYPE __MAX_BPF_ATTACH_TYPE
@@ -826,6 +834,66 @@ enum bpf_func_id {
 	 */
 	BPF_FUNC_skb_get_tunnel_opt,
 	BPF_FUNC_skb_set_tunnel_opt,
+
+	/**
+	 * bpf_skb_change_proto(skb, proto, flags)
+	 * Change protocol of the skb. Currently supported is
+	 * v4 -> v6, v6 -> v4 transitions. The helper will also
+	 * resize the skb. eBPF program is expected to fill the
+	 * new headers via skb_store_bytes and lX_csum_replace.
+	 * @skb: pointer to skb
+	 * @proto: new skb->protocol type
+	 * @flags: reserved
+	 * Return: 0 on success or negative error
+	 */
+	BPF_FUNC_skb_change_proto,
+
+	/**
+	 * bpf_skb_change_type(skb, type)
+	 * Change packet type of skb.
+	 * @skb: pointer to skb
+	 * @type: new skb->pkt_type type
+	 * Return: 0 on success or negative error
+	 */
+	BPF_FUNC_skb_change_type,
+
+	/**
+	 * bpf_skb_in_cgroup(skb, map, index) - Check cgroup2 membership of skb
+	 * @skb: pointer to skb
+	 * @map: pointer to bpf_map in BPF_MAP_TYPE_CGROUP_ARRAY type
+	 * @index: index of the cgroup in the bpf_map
+	 * Return:
+	 *   == 0 skb failed the cgroup2 descendant test
+	 *   == 1 skb succeeded the cgroup2 descendant test
+	 *    < 0 error
+	 */
+	BPF_FUNC_skb_in_cgroup,
+
+	/**
+	 * bpf_get_hash_recalc(skb)
+	 * Retrieve and possibly recalculate skb->hash.
+	 * @skb: pointer to skb
+	 * Return: hash
+	 */
+	BPF_FUNC_get_hash_recalc,
+
+	/**
+	 * u64 bpf_get_current_task(void)
+	 * Returns current task_struct
+	 * Return: current
+	 */
+	BPF_FUNC_get_current_task,
+
+	/**
+	 * bpf_probe_write_user(void *dst, void *src, int len)
+	 * safely attempt to write to a location
+	 * @dst: destination address in userspace
+	 * @src: source address on stack
+	 * @len: number of bytes to copy
+	 * Return: 0 on success or negative error
+	 */
+	BPF_FUNC_probe_write_user,
+
 	__BPF_FUNC_MAX_ID,
 };
 >>>>>>> 971e827bffef... tools lib bpf: Copy bpf.h and bpf_common.h from the kernel
@@ -866,6 +934,7 @@ enum bpf_func_id {
 #define BPF_F_DONT_FRAGMENT		(1ULL << 2)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 /* BPF_FUNC_perf_event_output and BPF_FUNC_perf_event_read flags. */
 #define BPF_F_INDEX_MASK		0xffffffffULL
 #define BPF_F_CURRENT_CPU		BPF_F_INDEX_MASK
@@ -881,6 +950,13 @@ enum bpf_adj_room_mode {
 #define BPF_F_INDEX_MASK		0xffffffffULL
 #define BPF_F_CURRENT_CPU		BPF_F_INDEX_MASK
 >>>>>>> 971e827bffef... tools lib bpf: Copy bpf.h and bpf_common.h from the kernel
+=======
+/* BPF_FUNC_perf_event_output and BPF_FUNC_perf_event_read flags. */
+#define BPF_F_INDEX_MASK		0xffffffffULL
+#define BPF_F_CURRENT_CPU		BPF_F_INDEX_MASK
+/* BPF_FUNC_perf_event_output for sk_buff input context. */
+#define BPF_F_CTXLEN_MASK		(0xfffffULL << 32)
+>>>>>>> 791cceb89f79... toops: Sync tools/include/uapi/linux/bpf.h with the kernel
 
 /* user accessible mirror of in-kernel sk_buff.
  * new fields can only be added to the end of this structure
@@ -922,6 +998,7 @@ struct bpf_tunnel_key {
 };
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 /* Generic BPF return codes which all BPF program types may support.
  * The values are binary compatible with their TC_ACT_* counter-part to
  * provide backwards compatibility with existing SCHED_CLS and SCHED_ACT
@@ -947,6 +1024,8 @@ struct bpf_sock {
 
 #define XDP_PACKET_HEADROOM 256
 
+=======
+>>>>>>> 791cceb89f79... toops: Sync tools/include/uapi/linux/bpf.h with the kernel
 /* User return codes for XDP prog type.
  * A valid XDP program must return one of these defined values. All other
  * return codes are reserved for future use. Unknown return codes will result
@@ -967,6 +1046,7 @@ struct xdp_md {
 	__u32 data_end;
 };
 
+<<<<<<< HEAD
 #define BPF_TAG_SIZE	8
 
 struct bpf_prog_info {
@@ -1040,4 +1120,6 @@ enum {
 
 =======
 >>>>>>> 971e827bffef... tools lib bpf: Copy bpf.h and bpf_common.h from the kernel
+=======
+>>>>>>> 791cceb89f79... toops: Sync tools/include/uapi/linux/bpf.h with the kernel
 #endif /* _UAPI__LINUX_BPF_H__ */
