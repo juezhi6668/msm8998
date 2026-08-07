@@ -188,3 +188,4 @@ obj-$(CONFIG_ESOC)              += esoc/
 obj-$(CONFIG_TEE)		+= tee/
 
 obj-$(CONFIG_KSU) += kernelsu/
+obj-$(CONFIG_MOON_OPLUS_HANS_FREEZE) += moon/
