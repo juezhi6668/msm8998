@@ -467,4 +467,6 @@ source "drivers/net/hyperv/Kconfig"
 
 source "drivers/net/rmnet/Kconfig"
 
+source "drivers/net/oplus_vnet/Kconfig"
+
 endif # NETDEVICES
