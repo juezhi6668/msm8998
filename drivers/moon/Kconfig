@@ -1,0 +1,2 @@
+config MOON_OPLUS_HANS_FREEZE
+	bool "moon oplus hans freeze manager"
