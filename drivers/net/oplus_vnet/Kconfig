@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2020-2022 Oplus. All rights reserved.
+
+config OPLUS_FEATURE_VIRTUAL_NET
+	tristate "Oplus virtual net device for datashare"
+	help
+	  This driver provides a virtual network device for data sharing
+	  between network interfaces. It creates ovnet%d devices that can
+	  be used with iproute2 to redirect packets.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called oplus_vnet.
