@@ -22,6 +22,9 @@
 #include <asm/cacheflush.h>
 #include <linux/uaccess.h>
 #include <linux/highmem.h>
+#ifdef CONFIG_MOON_OPLUS_HANS_FREEZE
+#include <linux/hans.h>
+#endif /* CONFIG_MOON_OPLUS_HANS_FREEZE */
 #include <linux/sizes.h>
 #include "binder_alloc.h"
 #include "binder_trace.h"
@@ -416,6 +419,9 @@ static struct binder_buffer *binder_alloc_new_buf_locked(
 	struct binder_buffer *buffer;
 	size_t buffer_size;
 	struct rb_node *best_fit = NULL;
+#ifdef CONFIG_MOON_OPLUS_HANS_FREEZE
+	struct task_struct *p = NULL;
+#endif /* CONFIG_MOON_OPLUS_HANS_FREEZE */
 	void __user *has_page_addr;
 	void __user *end_page_addr;
 	size_t size, data_offsets_size;
@@ -444,7 +450,6 @@ static struct binder_buffer *binder_alloc_new_buf_locked(
 				alloc->pid, extra_buffers_size);
 		return ERR_PTR(-EINVAL);
 	}
-
 	/* Pad 0-size buffers so they get assigned unique addresses */
 	size = max(size, sizeof(void *));
 
@@ -454,7 +459,18 @@ static struct binder_buffer *binder_alloc_new_buf_locked(
 			      alloc->pid, size);
 		return ERR_PTR(-ENOSPC);
 	}
-
+#ifdef CONFIG_MOON_OPLUS_HANS_FREEZE
+	if (is_async
+		&& (alloc->free_async_space < 3 * (size + sizeof(struct binder_buffer))
+		|| (alloc->free_async_space < ((alloc->buffer_size / 2) * 9 / 10)))) {
+		rcu_read_lock();
+		p = find_task_by_vpid(alloc->pid);
+		rcu_read_unlock();
+		if (p != NULL && is_frozen_tg(p)) {
+			hans_report(ASYNC_BINDER, task_tgid_nr(current), task_uid(current).val, task_tgid_nr(p), task_uid(p).val, "free_buffer_full", -1);
+		}
+	}
+#endif /* CONFIG_MOON_OPLUS_HANS_FREEZE */
 	while (n) {
 		buffer = rb_entry(n, struct binder_buffer, rb_node);
 		BUG_ON(!buffer->free);
