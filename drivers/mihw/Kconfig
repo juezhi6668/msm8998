@@ -1,0 +1,43 @@
+config MILLET
+	bool "Millet framework driver"
+	select MIHW
+	select ANDROID_VENDOR_HOOKS
+	select TRACEPOINTS
+	default n
+	help
+	  Enable Xiaomi Millet framework integration.
+
+config MILLET_CGROUP
+	tristate "frozen framework cgroup"
+	depends on MILLET
+	default y if MILLET
+
+config MILLET_SIG
+	tristate "frozen framework signal"
+	depends on MILLET
+	default y if MILLET
+
+config MILLET_BINDER
+	tristate "frozen framework binder"
+	depends on MILLET
+	default y if MILLET
+
+config MILLET_PKG
+	tristate "frozen framework pkg"
+	depends on MILLET
+	default y if MILLET
+
+config MILLET_BINDER_GKI
+	tristate "frozen framework binder gki"
+	depends on MILLET
+	default y if MILLET
+
+config MILLET_CORE
+	tristate "frozen framework core"
+	depends on MILLET
+	default y if MILLET
+
+config MILLET_HS
+	tristate "frozen framework hs"
+	depends on MILLET
+	default y if MILLET
