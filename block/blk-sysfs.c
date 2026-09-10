@@ -102,6 +102,13 @@ static ssize_t queue_max_sectors_show(struct request_queue *q, char *page)
 	return queue_var_show(max_sectors_kb, (page));
 }
 
+/* Xiaomi FBO compatibility: expose the queue limit in sectors. */
+static ssize_t queue_max_sectors_compat_show(struct request_queue *q,
+						char *page)
+{
+	return queue_var_show(queue_max_sectors(q), (page));
+}
+
 static ssize_t queue_max_segments_show(struct request_queue *q, char *page)
 {
 	return queue_var_show(queue_max_segments(q), (page));
@@ -372,6 +379,11 @@ static struct queue_sysfs_entry queue_max_hw_sectors_entry = {
 	.show = queue_max_hw_sectors_show,
 };
 
+static struct queue_sysfs_entry queue_max_sectors_compat_entry = {
+	.attr = {.name = "max_sectors", .mode = S_IRUGO },
+	.show = queue_max_sectors_compat_show,
+};
+
 static struct queue_sysfs_entry queue_max_segments_entry = {
 	.attr = {.name = "max_segments", .mode = S_IRUGO },
 	.show = queue_max_segments_show,
@@ -485,6 +497,7 @@ static struct attribute *default_attrs[] = {
 	&queue_ra_entry.attr,
 	&queue_max_hw_sectors_entry.attr,
 	&queue_max_sectors_entry.attr,
+	&queue_max_sectors_compat_entry.attr,
 	&queue_max_segments_entry.attr,
 	&queue_max_integrity_segments_entry.attr,
 	&queue_max_segment_size_entry.attr,
