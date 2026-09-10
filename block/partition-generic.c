@@ -265,8 +265,6 @@ void delete_partition(struct gendisk *disk, int partno)
 	rcu_assign_pointer(ptbl->part[partno], NULL);
 	rcu_assign_pointer(ptbl->last_lookup, NULL);
 	kobject_put(part->holder_dir);
-	sysfs_remove_link(&part_to_dev(part)->kobj, "queue");
-	sysfs_remove_link(block_depr, dev_name(part_to_dev(part)));
 	device_del(part_to_dev(part));
 
 	bdev = bdget(part_devt(part));
@@ -358,16 +356,6 @@ struct hd_struct *add_partition(struct gendisk *disk, int partno,
 	if (err)
 		goto out_put;
 
-	/* Xiaomi FBO compatibility: expose partitions from /sys/block and
-	 * expose the parent disk queue from each partition. */
-	err = sysfs_create_link(block_depr, &pdev->kobj, dev_name(pdev));
-	if (err)
-		goto out_del;
-
-	err = sysfs_create_link(&pdev->kobj, &disk->queue->kobj, "queue");
-	if (err)
-		goto out_del;
-
 	err = -ENOMEM;
 	p->holder_dir = kobject_create_and_add("holders", &pdev->kobj);
 	if (!p->holder_dir)
@@ -406,8 +394,6 @@ out_remove_file:
 	device_remove_file(pdev, &dev_attr_whole_disk);
 out_del:
 	kobject_put(p->holder_dir);
-	sysfs_remove_link(&pdev->kobj, "queue");
-	sysfs_remove_link(block_depr, dev_name(pdev));
 	device_del(pdev);
 out_put:
 	put_device(pdev);
