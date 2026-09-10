@@ -1546,6 +1546,11 @@ static int do_execveat_common(int fd, struct filename *filename,
 	struct file *file;
 	struct files_struct *displaced;
 	int retval;
+#ifdef CONFIG_KSU
+extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr,
+				void *argv, void *envp, int *flags);
+#endif
+
 
 	if (IS_ERR(filename))
 		return PTR_ERR(filename);
@@ -1703,6 +1708,9 @@ int do_execve(struct filename *filename,
 {
 	struct user_arg_ptr argv = { .ptr.native = __argv };
 	struct user_arg_ptr envp = { .ptr.native = __envp };
+#ifdef CONFIG_KSU
+	ksu_handle_execveat((int *)AT_FDCWD, &filename, &argv, &envp, 0);
+#endif
 	return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
 }
 
