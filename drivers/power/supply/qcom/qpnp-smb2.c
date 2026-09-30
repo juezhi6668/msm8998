@@ -423,6 +423,79 @@ static int smb2_parse_dt(struct smb2 *chip)
  * USB PSY REGISTRATION *
  ************************/
 
+/* Xiaomi MiCharge HIDL 1.0 compatibility attributes. */
+static bool smb2_micharge_fast(struct smb_charger *chg)
+{
+	if (!chg->typec_present)
+		return false;
+
+	switch (chg->real_charger_type) {
+	case POWER_SUPPLY_TYPE_USB_PD:
+	case POWER_SUPPLY_TYPE_USB_HVDCP:
+	case POWER_SUPPLY_TYPE_USB_HVDCP_3:
+		return true;
+	default:
+		return chg->pd_active;
+	}
+}
+
+static struct smb_charger *smb2_micharge_chg(struct device *dev)
+{
+	struct power_supply *psy = dev_get_drvdata(dev);
+	return psy ? power_supply_get_drvdata(psy) : NULL;
+}
+
+static ssize_t quick_charge_type_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct smb_charger *chg = smb2_micharge_chg(dev);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", chg && smb2_micharge_fast(chg) ? 1 : 0);
+}
+static DEVICE_ATTR_RO(quick_charge_type);
+
+static ssize_t pd_authentication_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct smb_charger *chg = smb2_micharge_chg(dev);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", chg && chg->pd_active ? 1 : 0);
+}
+static DEVICE_ATTR_RO(pd_authentication);
+
+static ssize_t power_max_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct smb_charger *chg = smb2_micharge_chg(dev);
+	int current_ua, voltage_uv, power_uw;
+
+	if (!chg || !smb2_micharge_fast(chg))
+		return scnprintf(buf, PAGE_SIZE, "0\n");
+
+	voltage_uv = chg->voltage_max_uv;
+	current_ua = get_client_vote(chg->usb_icl_votable, PD_VOTER);
+	if (current_ua <= 0)
+		current_ua = chg->real_charger_type == POWER_SUPPLY_TYPE_USB_HVDCP ? 2000000 : 3000000;
+	power_uw = (int)div_s64((s64)voltage_uv * current_ua, 1000000);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", power_uw);
+}
+static DEVICE_ATTR_RO(power_max);
+
+static int smb2_micharge_create_attrs(struct device *dev)
+{
+	int rc = device_create_file(dev, &dev_attr_quick_charge_type);
+	if (rc)
+		return rc;
+	rc = device_create_file(dev, &dev_attr_pd_authentication);
+	if (rc)
+		goto remove_quick;
+	rc = device_create_file(dev, &dev_attr_power_max);
+	if (rc)
+		goto remove_auth;
+	return 0;
+remove_auth:
+	device_remove_file(dev, &dev_attr_pd_authentication);
+remove_quick:
+	device_remove_file(dev, &dev_attr_quick_charge_type);
+	return rc;
+}
+
+
 static enum power_supply_property smb2_usb_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_ONLINE,
@@ -669,6 +742,13 @@ static int smb2_init_usb_psy(struct smb2 *chip)
 		pr_err("Couldn't register USB power supply\n");
 		return PTR_ERR(chg->usb_psy);
 	}
+	if (smb2_micharge_create_attrs(&chg->usb_psy->dev)) {
+		pr_err("MiCharge compatibility attributes failed\n");
+		power_supply_unregister(chg->usb_psy);
+		chg->usb_psy = NULL;
+		return -EINVAL;
+	}
+
 
 	return 0;
 }
