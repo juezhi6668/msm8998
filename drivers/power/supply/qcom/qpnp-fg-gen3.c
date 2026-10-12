@@ -3791,6 +3791,19 @@ static int fg_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
 		pval->intval = chip->cl.nom_cap_uah;
 		break;
+	case POWER_SUPPLY_PROP_SOH:
+		/*
+		 * SOH (State Of Health) = charge_full / charge_full_design * 100
+		 * charge_full        = chip->cl.learned_cc_uah
+		 * charge_full_design = chip->cl.nom_cap_uah
+		 */
+		if (!chip->cl.learned_cc_uah || !chip->cl.nom_cap_uah)
+			pval->intval = 0;
+		else
+			pval->intval = div_u64((u64)chip->cl.learned_cc_uah * 100,
+					       chip->cl.nom_cap_uah);
+		break;
+
 	case POWER_SUPPLY_PROP_RESISTANCE_ID:
 		pval->intval = chip->batt_id_ohms;
 		break;
@@ -4136,6 +4149,7 @@ static enum power_supply_property fg_psy_props[] = {
 	POWER_SUPPLY_PROP_RESISTANCE,
 	POWER_SUPPLY_PROP_BATTERY_TYPE,
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+	POWER_SUPPLY_PROP_SOH,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_CYCLE_COUNT_ID,

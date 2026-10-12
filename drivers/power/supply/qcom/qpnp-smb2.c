@@ -13,6 +13,7 @@
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/device.h>
+#include <linux/sysfs.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
@@ -30,6 +31,18 @@
 #include <linux/pmic-voter.h>
 
 #define SMB2_DEFAULT_WPWR_UW	8000000
+
+/*
+ * Class used to expose legacy/vendor "fuelsummary" nodes as symlinks
+ * pointing at the standard power_supply properties of the "battery" psy:
+ *   /sys/class/fuelsummary/soh   -> /sys/class/power_supply/battery/soh
+ *   /sys/class/fuelsummary/cycle -> /sys/class/power_supply/battery/cycle_count
+ *
+ * This keeps userspace (e.g. vivo-style battery health applets) that reads
+ * /sys/class/fuelsummary/{soh,cycle} working on top of the mainline
+ * power_supply interface.
+ */
+static struct class *fuelsummary_class;
 
 static struct smb_params v1_params = {
 	.fcc			= {
@@ -1117,6 +1130,7 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+	POWER_SUPPLY_PROP_SOH,
 	POWER_SUPPLY_PROP_TIME_TO_FULL_NOW,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 };
@@ -1225,6 +1239,7 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+	case POWER_SUPPLY_PROP_SOH:
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 	case POWER_SUPPLY_PROP_TEMP:
@@ -1380,6 +1395,205 @@ static const struct power_supply_desc batt_psy_desc = {
 	.set_property = smb2_batt_set_prop,
 	.property_is_writeable = smb2_batt_prop_is_writeable,
 };
+/*
+ * Legacy /sys/class/fuelsummary/{soh,cycle} entries.
+ *
+ * We register two read-only *class attributes* on the "fuelsummary"
+ * class so that the files show up exactly as:
+ *
+ *     /sys/class/fuelsummary/soh
+ *     /sys/class/fuelsummary/cycle
+ *
+ * (Using class_create() + class_create_file() avoids depending on the
+ *  private struct subsys_private, and avoids the extra
+ *  /sys/class/fuelsummary/<devname>/ nesting that device_create()
+ *  would introduce.)
+ *
+ * Semantics required by the vivo/iQOO battery-health applet:
+ *
+ *   soh   -> health percentage 0..100   (Straight percentage)
+ *   cycle -> "aging raw value" 0..2553  (NOT a cycle count!)
+ *
+ * The applet feeds "cycle" into its own aging->health curve table
+ * (see BatteryCapacityCalculator in IqooPowerSaving.apk):
+ *
+ *     curve = { 2551, 2535, 2519, ... , 0 }        (descending)
+ *     health(list, aging, fallback):
+ *         for i in 0..len-1:  if (aging > list[i]) return i;
+ *         return fallback;
+ *
+ * i.e. the applet maps the *aging raw value* to a health index via
+ * this curve.  To make the applet show the correct health we compute
+ * the real health percentage, then invert the curve to obtain the
+ * aging value that maps back to that percentage:
+ *
+ *     aging = curve[health] + 1
+ *
+ * (curve[] is the applet's default table; the "+1" makes the strict
+ *  ">" comparison in the applet match the intended index.)
+ *
+ * The show callbacks read the underlying values from the "battery"
+ * power_supply, which forwards SOH -> POWER_SUPPLY_PROP_SOH to the fuel
+ * gauge; "cycle" is then re-encoded from the same health value.
+ */
+
+/*
+ * The applet's default aging->health curve (BatteryCapacityCalculator
+ * f7366b).  Descending: index == health percentage, value == aging raw
+ * value at which that health applies.
+ */
+static const unsigned short fuelsummary_aging_curve[] = {
+	2551, 2535, 2519, 2503, 2487, 2471, 2455, 2439, 2423, 2407,
+	2391, 2375, 2359, 2343, 2327, 2311, 2295, 2279, 2263, 2247,
+	2231, 2215, 2199, 2183, 2167, 2151, 2135, 2119, 2103, 2087,
+	2071, 2055, 2039, 2023, 2007, 1991, 1975, 1959, 1943, 1927,
+	1911, 1895, 1879, 1863, 1847, 1831, 1815, 1799, 1783, 1767,
+	1751, 1735, 1719, 1703, 1687, 1671, 1655, 1618, 1599, 1577,
+	1537, 1504, 1464, 1430, 1394, 1358, 1325, 1290, 1255, 1222,
+	1187, 1153, 1119, 1086, 1057, 1024,  992,  958,  927,  896,
+	 866,  836,  805,  773,  740,  706,  671,  635,  598,  561,
+	 522,  485,  448,  410,  370,  328,  282,  231,  171,  101,
+	   0,
+};
+#define FUELSUMM_AGING_CURVE_LEN \
+	ARRAY_SIZE(fuelsummary_aging_curve)
+
+/*
+ * Invert the aging->health curve: return the aging raw value that the
+ * applet maps back to "health".  Clamp "health" into the valid range.
+ */
+static int fuelsummary_health_to_aging(int health)
+{
+	if (health < 0)
+		health = 0;
+	if (health >= (int)FUELSUMM_AGING_CURVE_LEN)
+		health = FUELSUMM_AGING_CURVE_LEN - 1;
+
+	/*
+	 * aging = curve[health] + 1 makes the applet's "aging > curve[i]"
+	 * comparison return exactly "health".  Never return 0, otherwise
+	 * the applet short-circuits to a hard-coded 100%.
+	 */
+	if (fuelsummary_aging_curve[health] == 0)
+		return 1;
+
+	return fuelsummary_aging_curve[health] + 1;
+}
+
+static ssize_t fuelsummary_class_soh_show(struct class *class,
+					  struct class_attribute *attr,
+					  char *buf)
+{
+	struct power_supply *psy;
+	union power_supply_propval val = {0, };
+	int rc;
+
+	psy = power_supply_get_by_name("battery");
+	if (!psy)
+		return -ENODEV;
+
+	rc = power_supply_get_property(psy, POWER_SUPPLY_PROP_SOH, &val);
+	power_supply_put(psy);
+	if (rc < 0)
+		return rc;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", val.intval);
+}
+
+/*
+ * "cycle" carries the aging raw value expected by the applet (not a
+ * cycle count).  We derive it from the real health percentage so the
+ * applet's curve maps it back to the correct health.
+ *
+ * Special cases:
+ *   - SOH read error (negative)      -> "-1" (applet treats as
+ *                                       "calibrating" and defers)
+ *   - health == 0 (fresh / unknown)  -> max aging value (2552)
+ */
+static ssize_t fuelsummary_class_cycle_show(struct class *class,
+					    struct class_attribute *attr,
+					    char *buf)
+{
+	struct power_supply *psy;
+	union power_supply_propval val = {0, };
+	int rc, health;
+
+	psy = power_supply_get_by_name("battery");
+	if (!psy)
+		return -ENODEV;
+
+	rc = power_supply_get_property(psy, POWER_SUPPLY_PROP_SOH, &val);
+	power_supply_put(psy);
+	if (rc < 0)
+		return rc;
+
+	health = val.intval;
+	if (health < 0)
+		return scnprintf(buf, PAGE_SIZE, "-1\n");
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 fuelsummary_health_to_aging(health));
+
+}
+
+/*
+ * The two read-only attributes, named "soh" and "cycle" so the files
+ * appear as /sys/class/fuelsummary/{soh,cycle}.
+ */
+static struct class_attribute fuelsummary_soh_attr =
+	__ATTR(soh, S_IRUGO, fuelsummary_class_soh_show, NULL);
+static struct class_attribute fuelsummary_cycle_attr =
+	__ATTR(cycle, S_IRUGO, fuelsummary_class_cycle_show, NULL);
+
+static int smb2_create_fuelsummary_links(struct smb_charger *chg,
+					 struct power_supply *batt_psy)
+{
+	int rc;
+
+	if (fuelsummary_class)
+		return 0;
+
+	fuelsummary_class = class_create(THIS_MODULE, "fuelsummary");
+	if (IS_ERR(fuelsummary_class)) {
+		rc = PTR_ERR(fuelsummary_class);
+		fuelsummary_class = NULL;
+		pr_err("failed to create fuelsummary class rc=%d\n", rc);
+		return rc;
+	}
+
+	rc = class_create_file(fuelsummary_class, &fuelsummary_soh_attr);
+	if (rc < 0) {
+		pr_err("failed to create fuelsummary/soh rc=%d\n", rc);
+		goto err_class;
+	}
+
+	rc = class_create_file(fuelsummary_class, &fuelsummary_cycle_attr);
+	if (rc < 0) {
+		pr_err("failed to create fuelsummary/cycle rc=%d\n", rc);
+		goto err_soh;
+	}
+
+	pr_info("fuelsummary nodes created (soh, cycle)\n");
+	return 0;
+
+err_soh:
+	class_remove_file(fuelsummary_class, &fuelsummary_soh_attr);
+err_class:
+	class_destroy(fuelsummary_class);
+	fuelsummary_class = NULL;
+	return rc;
+}
+
+static void __maybe_unused smb2_destroy_fuelsummary_links(void)
+{
+	if (!fuelsummary_class)
+		return;
+
+	class_remove_file(fuelsummary_class, &fuelsummary_soh_attr);
+	class_remove_file(fuelsummary_class, &fuelsummary_cycle_attr);
+	class_destroy(fuelsummary_class);
+	fuelsummary_class = NULL;
+}
 
 static int smb2_init_batt_psy(struct smb2 *chip)
 {
@@ -1397,7 +1611,15 @@ static int smb2_init_batt_psy(struct smb2 *chip)
 		return PTR_ERR(chg->batt_psy);
 	}
 
-	return rc;
+	/*
+	 * Create the legacy /sys/class/fuelsummary/{soh,cycle} nodes. A
+	 * failure here is non-fatal for the charger.
+	 */
+	rc = smb2_create_fuelsummary_links(chg, chg->batt_psy);
+	if (rc < 0)
+		pr_warn("fuelsummary nodes not created, rc=%d\n", rc);
+
+	return 0;
 }
 
 /******************************
