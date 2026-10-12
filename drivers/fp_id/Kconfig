@@ -1,0 +1,25 @@
+#
+# vivo-compatible fingerprint id node
+#
+menuconfig FP_ID
+	bool "Legacy vivo /sys/fp_id/fp_id node"
+	help
+	  Provide the /sys/fp_id/fp_id character node that vivo's fingerprint
+	  service (PropertiesCreator, vivo-services.jar) reads to decide which
+	  fingerprint hardware is present.
+
+	  The file contains one line of the form
+
+	      <type>_<manufacturer>_<module>
+
+	  where <type> is one of common / optical / udfp / ultrasonic / sidefp.
+
+	  The first field is a keyword, NOT a number: "common" maps to
+	  sensorType 1 (rear), "1" would be parsed as UNKNOWN (type 0).
+
+	  The default content is compiled into the driver
+	  (drivers/fp_id/fp_id.c, FP_ID_DEFAULT = "common_fpc_fpc1020").
+	  It can be changed at runtime by writing to the node, or at boot from
+	  device tree via the "vivo,fp-id" property.
+
+	  If unsure, say N.

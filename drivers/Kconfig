@@ -220,4 +220,6 @@ source "drivers/kernelsu/Kconfig"
 
 source "drivers/mihw/Kconfig"
 
+source "drivers/fp_id/Kconfig"
+
 endmenu
