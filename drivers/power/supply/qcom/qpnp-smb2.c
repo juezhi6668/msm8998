@@ -534,6 +534,103 @@ static enum power_supply_property smb2_usb_props[] = {
 	POWER_SUPPLY_PROP_PD_VOLTAGE_MIN,
 	POWER_SUPPLY_PROP_SDP_CURRENT_MAX,
 };
+/*
+ * ============================================================================
+ * vivo 充电引擎状态 (engine) 兼容层
+ * ============================================================================
+ * 背景：vivo OriginOS 的 HealthInfo 是"位打包"的，framework 侧
+ * (com.android.server.BatteryService.update()) 用
+ *     engine = maxChargingCurrentMicroamps & 0x0F
+ * 解出"充电引擎状态"，语义为：
+ *     1 = 快充 QUICK   3 = 闪充 FLASH   其它(0/8...) = 普通充电
+ * 并据此决定锁屏充电动画/充电卡片样式/是否显示快充。
+ *
+ * 本机 vendor 里的 health HAL 是标准 AOSP 实现
+ * (vendor/lib64/hw/android.hardware.health@2.0-impl-2.1.so)，它只把
+ * /sys/class/power_supply/usb/current_max  原样上报为 maxChargingCurrentMicroamps，
+ * 并不会去读 vivo 私有的 /sys/class/power_supply/battery/engine 节点。
+ * 所以只加 engine 节点，framework 是看不到的。
+ *
+ * 这里做两件事：
+ *   1) battery psy 上正经暴露只读节点 /sys/class/power_supply/battery/engine
+ *      （值就是 1/3/0，供 vivo 用户态 / 以后替换 vivo health HAL 时使用）
+ *   2) 在 usb psy 的 current_max 里"搭车"：低 12 位写入
+ *        bit[3:0]  = engine
+ *        bit[7:4]  = charging_speed（仅用于 UI 动效，这里按档位给个合理值）
+ *        bit[11:8] = 0（对应 framework 的 board_temp_status / low_battery /
+ *                       reverse_wireless_chg_state / reverse_wireless_chg_exception，
+ *                       全部清 0，可顺带消除"有线被识别成无线充电"的误判）
+ *      真实电流只损失低 12 位(< 4.1mA，约 0.3%)，对充电逻辑无影响；
+ *      bit[12+] 保持原样，不影响 framework 的 adapter_power 之外的任何真实用途。
+ * ============================================================================
+ */
+
+/* 功率阈值（mW）：达到即认为对应档位，可按机型/口味调整 */
+#define VIVO_ENGINE_FLASH_MW	15000	/* >=15W 视为闪充(3) */
+#define VIVO_ENGINE_QUICK_MW	 7500	/* >=7.5W 视为快充(1) */
+
+/* 供 framework 解码的 charging_speed 档位（仅影响 UI 动效，不影响判断） */
+static int smb2_vivo_charging_speed(int engine)
+{
+	switch (engine) {
+	case 3:
+		return 8;
+	case 1:
+		return 4;
+	default:
+		return 0;
+	}
+}
+
+/*
+ * 返回 vivo 语义的 engine 值：1=快充 3=闪充 其它=普通充电
+ *
+ * 判据是"协商到的充电器类型"，不是瞬时功率！
+ *   - 输入电流/功率随电量与系统负载波动极大：实测 98~99% 时
+ *     maxChargingCurrent 只有 1.0~1.1A（5V*1.07A≈5.4W），
+ *     用功率判定会出现"刚插上是快充、充一会儿就变普通"的问题；
+ *   - vivo 原机的 engine 反映的是充电模式/协议，与瞬时功率无关。
+ *
+ * 实测本机 maxChargingVoltage = 12000000(12V)，而
+ * smblib_get_prop_usb_voltage_max() 只对 HVDCP/HVDCP_3/PD 返回 12V，
+ * 说明快充协议已协商成功 → 按类型给 1/3。
+ */
+static int smb2_vivo_engine_state(struct smb_charger *chg)
+{
+	union power_supply_propval pval = {0};
+
+	/*
+	 * 没插充电器就返回 0。
+	 * 注意不能用 usb/online 判断：smblib_get_prop_usb_online() 在
+	 * USER_VOTER 的 ICL 投票为 0 时会返回 false（本机 logcat 里
+	 * chargerUsbOnline 一直是 false 就是这个原因），
+	 * 这里直接用 USBIN 的 present 位。
+	 */
+	if (smblib_get_prop_usb_present(chg, &pval) < 0 || !pval.intval)
+		return 0;
+
+	switch (chg->real_charger_type) {
+	case POWER_SUPPLY_TYPE_USB_HVDCP_3:	/* QC3.0：5~12V 动态调压 */
+	case POWER_SUPPLY_TYPE_USB_PD:		/* USB-PD */
+		return 3;			/* 闪充 */
+	case POWER_SUPPLY_TYPE_USB_HVDCP:	/* QC2.0：9V/12V */
+		return 1;			/* 快充 */
+	default:				/* SDP/DCP/CDP/FLOAT/UNKNOWN */
+		return 0;			/* 普通充电 */
+	}
+}
+
+
+/* 把 engine / charging_speed 打包进 current_max 低 12 位（见上方注释） */
+static int smb2_vivo_pack_current_max(struct smb_charger *chg, int icl_ua)
+{
+	int engine = smb2_vivo_engine_state(chg);
+	int speed = smb2_vivo_charging_speed(engine);
+	int flags = ((speed & 0xF) << 4) | (engine & 0xF);
+
+	return (icl_ua & ~0xFFF) | flags;
+}
+
 
 static int smb2_usb_get_prop(struct power_supply *psy,
 		enum power_supply_property psp,
@@ -575,6 +672,13 @@ static int smb2_usb_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		rc = smblib_get_prop_input_current_settled(chg, val);
+		/*
+		 * vivo 兼容：把 engine / charging_speed 打进低 12 位，
+		 * 供标准 health HAL 上报给 vivo framework 解码（详见文件上方注释）。
+		 */
+		if (!rc)
+			val->intval = smb2_vivo_pack_current_max(chg, val->intval);
+
 		break;
 	case POWER_SUPPLY_PROP_TYPE:
 		val->intval = POWER_SUPPLY_TYPE_USB_PD;
@@ -1131,6 +1235,7 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_SOH,
+	POWER_SUPPLY_PROP_ENGINE,
 	POWER_SUPPLY_PROP_TIME_TO_FULL_NOW,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 };
@@ -1193,6 +1298,10 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		val->intval = get_client_vote(chg->fv_votable,
 				BATT_PROFILE_VOTER);
+		break;
+	case POWER_SUPPLY_PROP_ENGINE:
+		/* vivo 充电引擎状态：1=快充 3=闪充 其它=普通（只读） */
+		val->intval = smb2_vivo_engine_state(chg);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_QNOVO_ENABLE:
 		rc = smblib_get_prop_charge_qnovo_enable(chg, val);
@@ -2890,6 +2999,7 @@ static int smb2_remove(struct platform_device *pdev)
 	struct smb2 *chip = platform_get_drvdata(pdev);
 	struct smb_charger *chg = &chip->chg;
 
+	smb2_destroy_fuelsummary_links();
 	power_supply_unregister(chg->batt_psy);
 	power_supply_unregister(chg->usb_psy);
 	power_supply_unregister(chg->usb_port_psy);
