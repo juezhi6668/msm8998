@@ -1609,8 +1609,8 @@ int smblib_get_prop_batt_status(struct smb_charger *chg,
 				union power_supply_propval *val)
 {
 	union power_supply_propval pval = {0, };
-	bool usb_online, dc_online, qnovo_en;
-	u8 stat, pt_en_cmd;
+	bool usb_online, dc_online;
+	u8 stat;
 	int rc;
 
 	rc = smblib_get_prop_usb_online(chg, &pval);
@@ -1659,42 +1659,39 @@ int smblib_get_prop_batt_status(struct smb_charger *chg,
 		val->intval = POWER_SUPPLY_STATUS_CHARGING;
 		break;
 	case TERMINATE_CHARGE:
-	case INHIBIT_CHARGE:
 		val->intval = POWER_SUPPLY_STATUS_FULL;
 		break;
+	case INHIBIT_CHARGE:
 	case DISABLE_CHARGE:
-		val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
-		break;
 	default:
-		val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
+		/*
+		 * A charger is online but no charge current is flowing:
+		 * weak / unknown charger, AICL still settling, JEITA or
+		 * thermal pause, charging suspended by a voter, or the
+		 * charge path inhibited by the PMIC.
+		 *
+		 * Do not report NOT_CHARGING / DISCHARGING / UNKNOWN here.
+		 * Android's BatteryService (shouldShutdownLocked()) treats
+		 * "batteryLevel == 0 && batteryStatus != CHARGING" as a dead
+		 * battery and starts an immediate shutdown, so the device
+		 * shows the "will shut down in 30 s" card and powers off
+		 * while it is plugged in. As long as a charger is online the
+		 * battery status is reported as CHARGING; only a completed
+		 * charge (TERMINATE_CHARGE) is reported as FULL.
+		 */
+		val->intval = POWER_SUPPLY_STATUS_CHARGING;
 		break;
 	}
 
-	if (val->intval != POWER_SUPPLY_STATUS_CHARGING)
-		return 0;
+	/*
+	 * The original code downgraded the status to NOT_CHARGING when
+	 * BATTERY_CHARGER_STATUS_7 reported that no charge path (trickle /
+	 * pre / fast / full-on) was enabled. That downgrade made
+	 * BatteryService shut the device down while charging, and the
+	 * detail is not needed for the battery status exposed to user
+	 * space, so it is intentionally not applied any more.
+	 */
 
-	rc = smblib_read(chg, BATTERY_CHARGER_STATUS_7_REG, &stat);
-	if (rc < 0) {
-		smblib_err(chg, "Couldn't read BATTERY_CHARGER_STATUS_2 rc=%d\n",
-				rc);
-			return rc;
-	}
-
-	stat &= ENABLE_TRICKLE_BIT | ENABLE_PRE_CHARGING_BIT |
-		 ENABLE_FAST_CHARGING_BIT | ENABLE_FULLON_MODE_BIT;
-
-	rc = smblib_read(chg, QNOVO_PT_ENABLE_CMD_REG, &pt_en_cmd);
-	if (rc < 0) {
-		smblib_err(chg, "Couldn't read QNOVO_PT_ENABLE_CMD_REG rc=%d\n",
-				rc);
-		return rc;
-	}
-
-	qnovo_en = (bool)(pt_en_cmd & QNOVO_PT_ENABLE_CMD_BIT);
-
-	/* ignore stat7 when qnovo is enabled */
-	if (!qnovo_en && !stat)
-		val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
 
 	return 0;
 }
