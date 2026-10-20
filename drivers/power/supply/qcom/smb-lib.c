@@ -2351,19 +2351,43 @@ int smblib_get_prop_usb_online(struct smb_charger *chg,
 int smblib_get_prop_usb_voltage_max(struct smb_charger *chg,
 				    union power_supply_propval *val)
 {
+	union power_supply_propval pval = {0, };
+	int uv, soc_decimal = 0;
+
 	switch (chg->real_charger_type) {
 	case POWER_SUPPLY_TYPE_USB_HVDCP:
 	case POWER_SUPPLY_TYPE_USB_HVDCP_3:
 	case POWER_SUPPLY_TYPE_USB_PD:
 		if (chg->smb_version == PM660_SUBTYPE)
-			val->intval = MICRO_9V;
+			uv = MICRO_9V;
 		else
-			val->intval = MICRO_12V;
+			uv = MICRO_12V;
 		break;
 	default:
-		val->intval = MICRO_5V;
+		uv = MICRO_5V;
 		break;
 	}
+
+	/*
+	 * vivo 把 soc_decimal 打包在 maxChargingVoltageMicrovolts 的 bit[15:0]：
+	 *
+	 *   com.android.server.BatteryService.update(HealthInfo):
+	 *       mSocDecimal = vol & 0xFFFF;
+	 *       healthInfo.maxChargingVoltageMicrovolts &= 0xFFFF0000;
+	 *
+	 * 也就是说低 16 位被当作“电量×100”使用，随后字段本身会被还原成
+	 * 高 16 位表示的真实电压，所以这样打包不会影响任何电压读取方。
+	 *
+	 * 不打包的后果：HVDCP/PD 报 12V 时，12000000(0xB71B00) 的低 16 位
+	 * 是 0x1B00 = 6912，被当成 69.12%，于是超快充时原子岛的电量
+	 * 永远显示 69%（普通充电不显示小数，所以看起来正常）。
+	 */
+	if (chg->bms_psy &&
+	    !power_supply_get_property(chg->bms_psy,
+				       POWER_SUPPLY_PROP_CAPACITY, &pval))
+		soc_decimal = pval.intval * 100;
+
+	val->intval = (uv & 0xFFFF0000) | (soc_decimal & 0xFFFF);
 
 	return 0;
 }
