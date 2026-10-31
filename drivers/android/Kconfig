@@ -92,6 +92,11 @@ config ANDROID_SIMPLE_LMK_TIMEOUT_MSEC
 
 endif
 
+config BINDER_SENDER_INFO
+	bool "OpenHarmony: binder sender info ioctl"
+	depends on ANDROID_BINDER_IPC
+	default n
+
 endif # if ANDROID
 
 endmenu

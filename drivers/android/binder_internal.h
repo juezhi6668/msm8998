@@ -12,6 +12,7 @@
 #include <linux/stddef.h>
 #include <linux/types.h>
 #include <linux/uidgid.h>
+#include <uapi/linux/android/binder.h>
 #include <uapi/linux/android/binderfs.h>
 #include "binder_alloc.h"
 
@@ -598,6 +599,12 @@ struct binder_thread {
 	atomic_t tmp_ref;
 	bool is_dead;
 	struct task_struct *task;
+#ifdef CONFIG_ACCESS_TOKENID
+	struct access_token tokens;
+#endif
+#ifdef CONFIG_BINDER_SENDER_INFO
+	__u64 sender_pid_nr;
+#endif
 	spinlock_t prio_lock;
 	struct binder_priority prio_next;
 	enum binder_prio_state prio_state;
@@ -648,6 +655,10 @@ struct binder_transaction {
 	 * during thread teardown
 	 */
 	spinlock_t lock;
+#ifdef CONFIG_ACCESS_TOKENID
+	u64 sender_tokenid;
+	u64 first_tokenid;
+#endif
 };
 
 /**

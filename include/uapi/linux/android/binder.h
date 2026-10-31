@@ -302,6 +302,26 @@ struct binder_frozen_state_info {
 #define BINDER_SET_CONTEXT_MGR_EXT	_IOW('b', 13, struct flat_binder_object)
 #define BINDER_FREEZE			_IOW('b', 14, struct binder_freeze_info)
 #define BINDER_GET_FROZEN_INFO		_IOWR('b', 15, struct binder_frozen_status_info)
+
+/* OpenHarmony binder extensions */
+struct binder_feature_set {
+	__u64 feature_set;
+};
+
+struct access_token {
+	__u64 sender_tokenid;
+	__u64 first_tokenid;
+	__u64 reserved[2];
+};
+
+struct binder_sender_info {
+	struct access_token tokens;
+	__u64 sender_pid_nr;
+};
+
+#define BINDER_FEATURE_SET	_IOWR('b', 30, struct binder_feature_set)
+#define BINDER_GET_ACCESS_TOKEN	_IOWR('b', 31, struct access_token)
+#define BINDER_GET_SENDER_INFO	_IOWR('b', 32, struct binder_sender_info)
 #define BINDER_ENABLE_ONEWAY_SPAM_DETECTION	_IOW('b', 16, __u32)
 
 /*
