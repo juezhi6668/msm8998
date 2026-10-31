@@ -2247,6 +2247,11 @@ struct task_struct {
 #ifdef CONFIG_ANDROID_SIMPLE_LMK
 	struct task_struct		*simple_lmk_next;
 #endif
+#ifdef CONFIG_ACCESS_TOKENID
+	u64				token;
+	u64				ftoken;
+#endif
+
 /* CPU-specific state of this task */
 	struct thread_struct thread;
 /*
