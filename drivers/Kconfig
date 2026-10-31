@@ -196,6 +196,10 @@ source "drivers/thunderbolt/Kconfig"
 
 source "drivers/android/Kconfig"
 
+source "drivers/accesstokenid/Kconfig"
+
+source "drivers/ohos/Kconfig"
+
 source "drivers/nvdimm/Kconfig"
 
 source "drivers/nvmem/Kconfig"

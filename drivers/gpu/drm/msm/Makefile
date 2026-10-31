@@ -167,4 +167,6 @@ msm_drm-$(CONFIG_DRM_MSM) += \
 	msm_submitqueue.o \
 	msm_trace_points.o
 
+msm_drm-y += mdss_panel_compat.o
+
 obj-$(CONFIG_DRM_MSM)	+= msm_drm.o
