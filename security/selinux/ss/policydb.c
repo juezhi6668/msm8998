@@ -153,6 +153,11 @@ static struct policydb_compat_info policydb_compat[] = {
 		.sym_num	= SYM_NUM,
 		.ocon_num	= OCON_NUM,
 	},
+	{
+		.version	= POLICYDB_VERSION_INFINIBAND,
+		.sym_num	= SYM_NUM,
+		.ocon_num	= OCON_NUM + 2,
+	},
 };
 
 static struct policydb_compat_info *policydb_lookup_compat(int version)
@@ -2125,6 +2130,15 @@ static int ocontext_read(struct policydb *p, struct policydb_compat_info *info,
 			goto out;
 		nel = le32_to_cpu(buf[0]);
 
+		if (i >= OCON_NUM) {
+			/* v31 InfiniBand sections: accepted, not used */
+			if (nel) {
+				rc = -EINVAL;
+				goto out;
+			}
+			continue;
+		}
+
 		l = NULL;
 		for (j = 0; j < nel; j++) {
 			rc = -ENOMEM;
@@ -3078,6 +3092,14 @@ static int ocontext_write(struct policydb *p, struct policydb_compat_info *info,
 	u32 nodebuf[8];
 	struct ocontext *c;
 	for (i = 0; i < info->ocon_num; i++) {
+		if (i >= OCON_NUM) {
+			/* v31 InfiniBand sections stay empty */
+			buf[0] = 0;
+			rc = put_entry(buf, sizeof(u32), 1, fp);
+			if (rc)
+				return rc;
+			continue;
+		}
 		nel = 0;
 		for (c = p->ocontexts[i]; c; c = c->next)
 			nel++;
