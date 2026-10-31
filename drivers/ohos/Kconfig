@@ -1,0 +1,19 @@
+menu "OpenHarmony / HarmonyOS userspace support"
+
+config OHOS_BRINGUP_NOREBOOT
+	bool "Refuse HarmonyOS init panic reboots (hmos.noreboot=1)"
+	default n
+
+config OHOS_BRINGUP_PERMISSIVE
+	bool "Pin SELinux permissive (hmos.permissive=1)"
+	depends on SECURITY_SELINUX_DEVELOP
+	default n
+
+config OHOS_FS_EMU
+	bool "Emulate hmdfs/sharefs mounts with tmpfs + bind mounts"
+	default n
+	help
+	  HarmonyOS storage_daemon needs the hmdfs and sharefs filesystems to
+	  start a user.  Emulate their local (non-distributed) views.
+
+endmenu
