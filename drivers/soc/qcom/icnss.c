@@ -20,6 +20,7 @@
 #include <linux/err.h>
 #include <linux/of.h>
 #include <linux/init.h>
+#include <linux/firmware.h>
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -1392,6 +1393,188 @@ out:
 	return ret;
 }
 
+/* wlfw_cal_report_send_sync_msg() - report calibration availability to the target.
+ *
+ * The proven release for WLAN.2.0.c5 firmware: after the last BDF segment the
+ * target stays in its download state until the host sends CAL_REPORT, and it
+ * answers with QMI_WLFW_READY_IND as soon as this request arrives. The vendor
+ * daemon's wire form is a single TLV 0x01 with one byte (mlen=4), which the
+ * generated wlfw_cal_report_req_msg_v01_ei cannot produce (it treats 0x01 as a
+ * data-length plus u32 array), so the table below maps TLV 0x01 onto one u8.
+ */
+static struct elem_info wlfw_cal_report_min_req_msg_v01_ei[] = {
+	{
+		.data_type      = QMI_UNSIGNED_1_BYTE,
+		.elem_len       = 1,
+		.elem_size      = sizeof(u8),
+		.is_array       = NO_ARRAY,
+		.tlv_type       = 0x01,
+		.offset         = offsetof(struct wlfw_cal_report_req_msg_v01,
+					   xo_cal_data),
+	},
+	{
+		.data_type      = QMI_EOTI,
+		.is_array       = NO_ARRAY,
+		.tlv_type       = QMI_COMMON_TLV_TYPE,
+	},
+};
+
+static int wlfw_cal_report_send_sync_msg(void)
+{
+	struct wlfw_cal_report_req_msg_v01 req;
+	struct wlfw_cal_report_resp_msg_v01 resp;
+	struct msg_desc req_desc, resp_desc;
+	int ret;
+
+	if (!penv || !penv->wlfw_clnt)
+		return -ENODEV;
+
+	memset(&req, 0, sizeof(req));
+	memset(&resp, 0, sizeof(resp));
+
+	req_desc.max_msg_len = WLFW_CAL_REPORT_REQ_MSG_V01_MAX_MSG_LEN;
+	req_desc.msg_id = QMI_WLFW_CAL_REPORT_REQ_V01;
+	req_desc.ei_array = wlfw_cal_report_min_req_msg_v01_ei;
+
+	resp_desc.max_msg_len = WLFW_CAL_REPORT_RESP_MSG_V01_MAX_MSG_LEN;
+	resp_desc.msg_id = QMI_WLFW_CAL_REPORT_RESP_V01;
+	resp_desc.ei_array = wlfw_cal_report_resp_msg_v01_ei;
+
+	ret = qmi_send_req_wait(penv->wlfw_clnt, &req_desc, &req, sizeof(req),
+				&resp_desc, &resp, sizeof(resp),
+				WLFW_TIMEOUT_MS);
+	if (ret < 0) {
+		icnss_pr_err("Failed to send cal report: %d\n", ret);
+		return ret;
+	}
+	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+		icnss_pr_err("Cal report rejected, result:%d error:%d\n",
+			     resp.resp.result, resp.resp.error);
+		return -EPROTO;
+	}
+
+	icnss_pr_info("Cal reported, waiting for FW ready indication\n");
+	return 0;
+}
+
+/* wlfw_bdf_dnld_send_sync_msgs() - download the board data file to the target.
+ *
+ * Nothing else in this tree sends the BDF: qcacld-3.0 has no BDF path and the
+ * vendor cnss-daemon stalls because this kernel builds no cnss netlink family.
+ * The field values are the ones captured off the daemon's own accepted
+ * transactions and confirmed by replaying them from userspace.
+ */
+static int wlfw_bdf_dnld_send_sync_msgs(void)
+{
+	struct wlfw_bdf_download_req_msg_v01 *req;
+	struct wlfw_bdf_download_resp_msg_v01 resp;
+	struct msg_desc req_desc, resp_desc;
+	const struct firmware *fw_entry;
+	const u8 *temp;
+	unsigned int remaining;
+	char file_name[32];
+	int ret = 0;
+	u32 seg_id = 0;
+
+	if (!penv || !penv->wlfw_clnt)
+		return -ENODEV;
+
+	if (penv->board_info.board_id != 0xFF)
+		scnprintf(file_name, sizeof(file_name), "bdwlan.b%02x",
+			  penv->board_info.board_id);
+	else
+		scnprintf(file_name, sizeof(file_name), "bdwlan.bin");
+
+	ret = request_firmware(&fw_entry, file_name, &penv->pdev->dev);
+	if (ret && strcmp(file_name, "bdwlan.bin")) {
+		scnprintf(file_name, sizeof(file_name), "bdwlan.bin");
+		ret = request_firmware(&fw_entry, file_name, &penv->pdev->dev);
+	}
+	if (ret) {
+		icnss_pr_err("Failed to load BDF %s: %d\n", file_name, ret);
+		return ret;
+	}
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req) {
+		release_firmware(fw_entry);
+		return -ENOMEM;
+	}
+
+	temp = fw_entry->data;
+	remaining = fw_entry->size;
+
+	req_desc.max_msg_len = WLFW_BDF_DOWNLOAD_REQ_MSG_V01_MAX_MSG_LEN;
+	req_desc.msg_id = QMI_WLFW_BDF_DOWNLOAD_REQ_V01;
+	req_desc.ei_array = wlfw_bdf_download_req_msg_v01_ei;
+
+	resp_desc.max_msg_len = WLFW_BDF_DOWNLOAD_RESP_MSG_V01_MAX_MSG_LEN;
+	resp_desc.msg_id = QMI_WLFW_BDF_DOWNLOAD_RESP_V01;
+	resp_desc.ei_array = wlfw_bdf_download_resp_msg_v01_ei;
+
+	icnss_pr_info("Downloading BDF %s, size %u\n", file_name, remaining);
+
+	while (remaining) {
+		memset(&resp, 0, sizeof(resp));
+		req->valid = 1;
+		req->file_id_valid = 1;
+		req->file_id = 0;
+		req->total_size_valid = 1;
+		req->total_size = fw_entry->size;
+		req->seg_id_valid = 1;
+		req->seg_id = seg_id;
+		req->data_valid = 1;
+		req->end_valid = 1;
+		req->bdf_type_valid = 0;
+
+		if (remaining > QMI_WLFW_MAX_DATA_SIZE_V01) {
+			req->data_len = QMI_WLFW_MAX_DATA_SIZE_V01;
+		} else {
+			req->data_len = remaining;
+			req->end = 1;
+		}
+		memcpy(req->data, temp, req->data_len);
+
+		ret = qmi_send_req_wait(penv->wlfw_clnt, &req_desc, req,
+					sizeof(*req), &resp_desc, &resp,
+					sizeof(resp), WLFW_TIMEOUT_MS);
+		if (ret) {
+			icnss_pr_err("Failed to send BDF download req, seg %u err %d\n",
+				     seg_id, ret);
+			break;
+		}
+		if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+			/* The completion segment is answered with
+			 * result=1 error=1 even by the daemon's accepted
+			 * download; only a rejection before the last segment
+			 * means the transfer really failed.
+			 */
+			if (!req->end) {
+				icnss_pr_err("BDF download rejected, result:%d error:%d seg:%u\n",
+					     resp.resp.result, resp.resp.error,
+					     seg_id);
+				ret = -EPROTO;
+				break;
+			}
+			icnss_pr_info("BDF completion answered result:%d error:%d\n",
+				      resp.resp.result, resp.resp.error);
+		}
+
+		remaining -= req->data_len;
+		temp += req->data_len;
+		seg_id++;
+	}
+
+	if (!ret) {
+		icnss_pr_info("BDF download done, reporting cal\n");
+		ret = wlfw_cal_report_send_sync_msg();
+	}
+
+	kfree(req);
+	release_firmware(fw_entry);
+	return ret;
+}
+
 static int wlfw_ind_register_send_sync_msg(void)
 {
 	int ret;
@@ -2202,6 +2385,10 @@ static int icnss_driver_event_server_arrive(void *data)
 	ret = wlfw_cap_send_sync_msg();
 	if (ret < 0)
 		goto err_setup_msa;
+
+	ret = wlfw_bdf_dnld_send_sync_msgs();
+	if (ret < 0)
+		icnss_pr_err("BDF download failed: %d\n", ret);
 
 	wlfw_dynamic_feature_mask_send_sync_msg(penv,
 						dynamic_feature_mask);
