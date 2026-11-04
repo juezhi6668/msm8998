@@ -17,6 +17,8 @@
 #include <linux/sched.h>
 #include <linux/jiffies.h>
 #include <linux/err.h>
+#include <linux/atomic.h>
+#include <linux/module.h>
 
 #include "kgsl.h"
 #include "kgsl_cffdump.h"
@@ -25,6 +27,8 @@
 #include "adreno_ringbuffer.h"
 #include "adreno_trace.h"
 #include "kgsl_sharedmem.h"
+
+extern int kgsl_tslog;
 
 #define DRAWQUEUE_NEXT(_i, _s) (((_i) + 1) % (_s))
 
@@ -653,6 +657,13 @@ static int sendcmd(struct adreno_device *adreno_dev,
 	trace_adreno_cmdbatch_submitted(drawobj, (int) dispatcher->inflight,
 		time.ticks, (unsigned long) secs, nsecs / 1000, drawctxt->rb,
 		adreno_get_rptr(drawctxt->rb));
+
+	/* Past adreno_ringbuffer_submitcmd() returning 0, so this IB really is
+	 * in the ringbuffer and the timestamp is now owed by the GPU. */
+	if (kgsl_tslog)
+		printk(KERN_INFO "kgsl ts: SUBMIT ctx %d ts %u rptr %x inflight %u\n",
+			(int) drawobj->context->id, drawobj->timestamp,
+			adreno_get_rptr(drawctxt->rb), dispatcher->inflight);
 
 	mutex_unlock(&device->mutex);
 
@@ -1736,6 +1747,28 @@ static void adreno_fault_header(struct kgsl_device *device,
 			pr_fault(device, drawobj,
 				"gpu fault rb %d rb sw r/w %4.4x/%4.4x\n",
 				rb->id, rptr, rb->wptr);
+		/* Patch 0027: the hardware registers say the CP stopped; only the
+		 * dispatcher's own bookkeeping says whether it stopped inside a
+		 * context switch that never finished, or after finishing the work.
+		 */
+		if (kgsl_tslog) {
+			unsigned int retired = 0;
+			struct adreno_dispatcher_drawqueue *dq = &rb->dispatch_q;
+
+			kgsl_sharedmem_readl(&device->memstore, &retired,
+				KGSL_MEMSTORE_GLOBAL);
+			pr_fault(device, drawobj,
+				"hang state rb %d ts %d hw %X/%X sw %X/%X/%X midway %d pendt %X gpr11 %X starve %d fdts %d\n",
+				rb->id, rb->timestamp, rptr, wptr, rb->_wptr,
+				rb->wptr, rb->last_wptr, rb->preempted_midway,
+				rb->wptr_preempt_end, rb->gpr11,
+				(int) rb->starve_timer_state, rb->fault_detect_ts);
+			pr_fault(device, drawobj,
+				"hang queue inflight %u head %u tail %u ctxq %d memstore %u cmdpriv %lx fpol %lx frec %lx\n",
+				dq->inflight, dq->head, dq->tail,
+				dq->active_context_count, retired, cmdobj->priv,
+				cmdobj->fault_policy, cmdobj->fault_recovery);
+		}
 	} else {
 		int id = (rb != NULL) ? rb->id : -1;
 
@@ -1761,6 +1794,17 @@ void adreno_fault_skipcmd_detached(struct adreno_device *adreno_dev,
 		clear_bit(ADRENO_CONTEXT_SKIP_CMD, &drawctxt->base.priv);
 	}
 }
+
+/* Patch 0032: how many times fault tolerance may drop one faulting command instead of
+ * invalidating the whole context. 0 restores upstream behavior exactly. The counter is
+ * global because on this port a single process (render_service) owns every fault.
+ */
+static int kgsl_ctx_keep = 1000;
+module_param(kgsl_ctx_keep, int, 0644);
+MODULE_PARM_DESC(kgsl_ctx_keep,
+	"Times to skip a faulting command instead of killing its context (0 = upstream)");
+
+static atomic_t ctx_keep_count = ATOMIC_INIT(0);
 
 /**
  * process_cmdobj_fault() - Process a cmdobj for fault policies
@@ -1930,8 +1974,43 @@ static void process_cmdobj_fault(struct kgsl_device *device,
 
 	/* If we get here then all the policies failed */
 
-	pr_context(device, drawobj->context, "gpu %s ctx %d ts %d\n",
-		state, drawobj->context->id, drawobj->timestamp);
+	/* Patch 0032: upstream retires the context here. On this port that is a death
+	 * sentence, because Mesa never recreates its GPU context - every later submit
+	 * returns -EDEADLK forever and the UI stays frozen until a reboot. The faulting
+	 * command is deterministic (15 render_service generations, 15 identical deaths),
+	 * so dropping just that batch is enough to keep drawing. Re-arm the ladder the
+	 * device itself hands out at submit time; _skip_cmd() then pushes it onto the
+	 * next batch of this context and forces a preamble so GPU state is rebuilt.
+	 */
+	if (kgsl_ctx_keep > 0 &&
+			atomic_inc_return(&ctx_keep_count) <= kgsl_ctx_keep) {
+		int kept = atomic_read(&ctx_keep_count);
+
+		cmdobj->fault_policy = ADRENO_DEVICE(device)->ft_policy;
+		/* Keep the header/snapshot suppression from the run above */
+		set_bit(KGSL_FT_SKIP_PMDUMP, &cmdobj->fault_policy);
+
+		/* A snapshot costs about 56 ms and 572 KB per fault - stop paying for
+		 * it once the pattern is established. Fault headers still print.
+		 */
+		if (kept == 3)
+			drawobj->context->flags |= KGSL_CONTEXT_NO_SNAPSHOT;
+
+		if ((kept % 25) == 1)
+			pr_context(device, drawobj->context,
+				"gpu keep ctx %d ts %d kept %d of %d state %s snapskip %d\n",
+				drawobj->context->id, drawobj->timestamp, kept,
+				kgsl_ctx_keep, state,
+				(int) !!(drawobj->context->flags &
+					KGSL_CONTEXT_NO_SNAPSHOT));
+
+		_skip_cmd(cmdobj, replay, count);
+		return;
+	}
+
+	pr_context(device, drawobj->context, "gpu %s ctx %d ts %d kept %d\n",
+		state, drawobj->context->id, drawobj->timestamp,
+		atomic_read(&ctx_keep_count));
 
 	/* Mark the context as failed */
 	mark_guilty_context(device, drawobj->context->id);
