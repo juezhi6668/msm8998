@@ -15,6 +15,7 @@
 #include <linux/list.h>
 #include <linux/workqueue.h>
 #include <linux/debugfs.h>
+#include <linux/module.h>
 #include <kgsl_device.h>
 
 #include "kgsl_debugfs.h"
@@ -26,6 +27,18 @@
  */
 static struct kmem_cache *events_cache;
 static struct dentry *events_dentry;
+
+/* Single switch for the completion-path trace in this file and in
+ * adreno_dispatch.c, kgsl_sync.c and adreno.c. Built-in (=y) so the
+ * parameter shows up as /sys/module/msm_kgsl_core/parameters/kgsl_tslog.
+ * The trace uses printk(KERN_INFO ...) rather than pr_info(): pr_info() in
+ * this tree expands through pr_fmt() and clang then fails the call with
+ * -Wformat-security ("format string is not a string literal"). */
+int kgsl_tslog = 1;
+module_param(kgsl_tslog, int, 0644);
+MODULE_PARM_DESC(kgsl_tslog,
+	"1 = log one \"kgsl ts:\" line per submit / CP interrupt / retire sweep / fence signal, 0 = off");
+EXPORT_SYMBOL(kgsl_tslog);
 
 static inline void signal_event(struct kgsl_device *device,
 		struct kgsl_event *event, int result)
@@ -96,6 +109,15 @@ static void _process_event_group(struct kgsl_device *device,
 
 	group->readtimestamp(device, group->priv, KGSL_TIMESTAMP_RETIRED,
 		&timestamp);
+
+	/* Only on real progress: this runs from a timer as well as from the
+	 * dispatcher, and an uninteresting sweep per tick would bury the trace.
+	 * group->name is "rb_events-N" for a ringbuffer group (no context) and
+	 * "context-N" for a per-context group. */
+	if (kgsl_tslog && timestamp != group->processed)
+		printk(KERN_INFO "kgsl ts: SWEEP group %s ctx %d retired %u was %u\n",
+			group->name, (context != NULL) ? (int) context->id : -1,
+			timestamp, group->processed);
 
 	if (!flush && _do_process_group(group->processed, timestamp) == false)
 		goto out;

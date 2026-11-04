@@ -117,6 +117,15 @@ static struct {
 	int tail;
 } memfree;
 
+/* Patch 0024: kgsl prints nothing at all about a buffer's life cycle unless its log
+ * levels are raised through debugfs, which costs a root channel and a reboot to use.
+ * These lines follow every import / map / free of 4 MB or more behind the kgsl_tslog
+ * switch from patch 0020, so a GPU page fault can be attributed to one of: never
+ * imported, imported but never mapped, or freed while the CP was still writing it.
+ */
+extern int kgsl_tslog;
+#define KGSL_MEMLOG_MIN (4 << 20)
+
 static int kgsl_memfree_init(void)
 {
 	memfree.list = kzalloc(MEMFREE_ENTRIES * sizeof(struct memfree_entry),
@@ -343,6 +352,12 @@ kgsl_mem_entry_destroy(struct kref *kref)
 
 	/* pull out the memtype before the flags get cleared */
 	memtype = kgsl_memdesc_usermem_type(&entry->memdesc);
+
+	if (kgsl_tslog && entry->memdesc.size >= KGSL_MEMLOG_MIN)
+		pr_info("kgsl free: gpuaddr 0x%llX size %llu type %d pt %u\n",
+			(unsigned long long)entry->memdesc.gpuaddr,
+			(unsigned long long)entry->memdesc.size, memtype,
+			entry->memdesc.pagetable ? entry->memdesc.pagetable->name : 0);
 
 	/* Detach from process list */
 	kgsl_mem_entry_detach_process(entry);
@@ -2674,8 +2689,17 @@ static int kgsl_setup_dma_buf(struct kgsl_device *device,
 
 	entry->memdesc.size = PAGE_ALIGN(entry->memdesc.size);
 
+	if (kgsl_tslog && entry->memdesc.size >= KGSL_MEMLOG_MIN)
+		pr_info("kgsl imp: dmabuf %llu -> memdesc %llu id %d pid %d\n",
+			(unsigned long long)dmabuf->size,
+			(unsigned long long)entry->memdesc.size,
+			entry->id, (int) task_tgid_vnr(current));
+
 out:
 	if (ret) {
+		if (kgsl_tslog)
+			pr_err("kgsl imp: dma_buf setup failed %d pid %d\n",
+				ret, (int) task_tgid_vnr(current));
 		if (!IS_ERR_OR_NULL(attach))
 			dma_buf_detach(dmabuf, attach);
 

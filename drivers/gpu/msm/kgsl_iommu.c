@@ -48,6 +48,9 @@
 static struct kgsl_mmu_pt_ops iommu_pt_ops;
 static bool need_iommu_sync;
 
+/* Patch 0024 - declared here because the first use is in the fault handler at line 764 */
+extern int kgsl_tslog;
+
 const unsigned int kgsl_iommu_reg_list[KGSL_IOMMU_REG_MAX] = {
 	0x0,/* SCTLR */
 	0x20,/* TTBR0 */
@@ -761,6 +764,12 @@ static void _check_if_freed(struct kgsl_iommu_context *ctx,
 		KGSL_LOG_DUMP(ctx->kgsldev,
 			"[%8.8llX-%8.8llX] (%s) was already freed by pid %d\n",
 			gpuaddr, gpuaddr + size, name, pid);
+	} else if (kgsl_tslog) {
+		/* the memfree list holds the last MEMFREE_ENTRIES frees, so this says the
+		 * address was not a recently freed kgsl entry either */
+		KGSL_LOG_DUMP(ctx->kgsldev,
+			"---- not a recent free: addr %8.8llX pt %d has no memfree match\n",
+			addr, ptname);
 	}
 }
 

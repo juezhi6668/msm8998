@@ -383,6 +383,9 @@ kgsl_mmu_get_gpuaddr(struct kgsl_pagetable *pagetable,
 }
 EXPORT_SYMBOL(kgsl_mmu_get_gpuaddr);
 
+/* Patch 0024, see the comment in kgsl.c */
+extern int kgsl_tslog;
+
 int
 kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 				struct kgsl_memdesc *memdesc)
@@ -401,12 +404,23 @@ kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 
 	size = kgsl_memdesc_footprint(memdesc);
 
+	if (kgsl_tslog && memdesc->size >= (4 << 20))
+		pr_info("kgsl map: pt %u gpuaddr 0x%llX size %llu footprint %d\n",
+			pagetable->name, (unsigned long long)memdesc->gpuaddr,
+			(unsigned long long)memdesc->size, size);
+
 	if (PT_OP_VALID(pagetable, mmu_map)) {
 		int ret;
 
 		ret = pagetable->pt_ops->mmu_map(pagetable, memdesc);
-		if (ret)
+		if (ret) {
+			if (kgsl_tslog && memdesc->size >= (4 << 20))
+				pr_err("kgsl map: pt %u gpuaddr 0x%llX size %llu FAILED %d\n",
+					pagetable->name,
+					(unsigned long long)memdesc->gpuaddr,
+					(unsigned long long)memdesc->size, ret);
 			return ret;
+		}
 
 		atomic_inc(&pagetable->stats.entries);
 		KGSL_STATS_ADD(size, &pagetable->stats.mapped,
