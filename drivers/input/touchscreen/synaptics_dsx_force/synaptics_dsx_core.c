@@ -204,6 +204,24 @@ static void synaptics_rmi4_late_resume(struct early_suspend *h);
 static irqreturn_t synaptics_rmi4_irq(int irq, void *data);
 static int synaptics_rmi4_suspend(struct device *dev);
 
+/* Patch 0021: the attention line goes quiet for whole seconds while a finger is on the
+ * glass and this driver never says why. Log the silence and every path in here that can
+ * cause it: the GPIO-level discard in the ISR, the two branches of irq_enable, the
+ * controller-side interrupt mask, both fb notifiers, suspend and resume.
+ */
+int dsx_tslog = 1;
+module_param(dsx_tslog, int, 0644);
+MODULE_PARM_DESC(dsx_tslog,
+	"1 = log attention-IRQ gaps and every path that can silence the line, 0 = silent");
+EXPORT_SYMBOL(dsx_tslog);
+static unsigned long dsx_last_jif;
+static unsigned int dsx_irqs_since_gap;
+static unsigned int dsx_discarded;
+/* Patch 0022: the same >200 ms gate, reused for what the chip actually reported. */
+static unsigned long dsx_last_report_jif;
+static int dsx_gated;
+static int dsx_matched;
+
 static int synaptics_rmi4_resume(struct device *dev);
 
 static ssize_t synaptics_rmi4_f01_reset_store(struct device *dev,
@@ -1939,6 +1957,11 @@ static void synaptics_rmi4_report_touch(struct synaptics_rmi4_data *rmi4_data,
 			rmi4_data->fingers_on_2d = true;
 		else
 			rmi4_data->fingers_on_2d = false;
+		/* Also printed outside the gate when the count is zero, so a finger on the
+		 * glass that the controller reports as nothing is never invisible. */
+		if (dsx_tslog && (dsx_gated || !touch_count_2d))
+			printk(KERN_INFO "dsx f11: fingers=%d on2d=%d\n",
+				touch_count_2d, (int)rmi4_data->fingers_on_2d);
 		break;
 	case SYNAPTICS_RMI4_F12:
 		touch_count_2d = synaptics_rmi4_f12_abs_report(rmi4_data,
@@ -1948,6 +1971,9 @@ static void synaptics_rmi4_report_touch(struct synaptics_rmi4_data *rmi4_data,
 			rmi4_data->fingers_on_2d = true;
 		else
 			rmi4_data->fingers_on_2d = false;
+		if (dsx_tslog && (dsx_gated || !touch_count_2d))
+			printk(KERN_INFO "dsx f12: fingers=%d on2d=%d\n",
+				touch_count_2d, (int)rmi4_data->fingers_on_2d);
 		break;
 	case SYNAPTICS_RMI4_F1A:
 		synaptics_rmi4_f1a_report(rmi4_data, fhandler);
@@ -1988,6 +2014,24 @@ static void synaptics_rmi4_sensor_report(struct synaptics_rmi4_data *rmi4_data,
 		return;
 	}
 
+	/* This is the chip's own answer: F01 Data0 (device status) plus the interrupt
+	 * status bytes, on the entries that end a silence.
+	 */
+	dsx_matched = 0;
+	if (dsx_tslog) {
+		unsigned int since = dsx_last_report_jif ?
+			jiffies_to_msecs(jiffies - dsx_last_report_jif) : 0;
+
+		dsx_last_report_jif = jiffies;
+		dsx_gated = since > 200;
+		if (dsx_gated)
+			printk(KERN_INFO "dsx rep: status=%02x intr=%02x %02x suspend=%d wakeup=%d since=%u ms\n",
+				data[0], intr[0],
+				rmi4_data->num_of_intr_regs > 1 ? intr[1] : 0,
+				(int)rmi4_data->suspend, (int)rmi4_data->wakeup_en,
+				since);
+	}
+
 	status.data[0] = data[0];
 	if (status.status_code == STATUS_CRC_IN_PROGRESS) {
 		retval = synaptics_rmi4_check_status(rmi4_data,
@@ -2026,6 +2070,7 @@ static void synaptics_rmi4_sensor_report(struct synaptics_rmi4_data *rmi4_data,
 			if (fhandler->num_of_data_sources) {
 				if (fhandler->intr_mask &
 						intr[fhandler->intr_reg_num]) {
+					dsx_matched++;
 					synaptics_rmi4_report_touch(rmi4_data,
 							fhandler);
 				}
@@ -2044,6 +2089,10 @@ static void synaptics_rmi4_sensor_report(struct synaptics_rmi4_data *rmi4_data,
 	}
 	mutex_unlock(&exp_data.mutex);
 
+	if (dsx_tslog && !dsx_matched)
+		printk(KERN_INFO "dsx rep: no function claimed intr=%02x status=%02x\n",
+			intr[0], data[0]);
+
 	return;
 }
 
@@ -2053,8 +2102,25 @@ static irqreturn_t synaptics_rmi4_irq(int irq, void *data)
 	const struct synaptics_dsx_board_data *bdata =
 			rmi4_data->hw_if->board_data;
 
-	if (gpio_get_value(bdata->irq_gpio) != bdata->irq_on_state)
+	if (dsx_tslog) {
+		unsigned long now = jiffies;
+		unsigned int gap_ms = dsx_last_jif ?
+			jiffies_to_msecs(now - dsx_last_jif) : 0;
+
+		dsx_last_jif = now;
+		if (gap_ms > 200)
+			printk(KERN_INFO "dsx irq: silent %u ms, %u irqs before it, %u discarded\n",
+				gap_ms, dsx_irqs_since_gap, dsx_discarded);
+		dsx_irqs_since_gap = 0;
+	}
+	dsx_irqs_since_gap++;
+
+	if (gpio_get_value(bdata->irq_gpio) != bdata->irq_on_state) {
+		/* The interrupt was taken but the line no longer reads active, so nothing
+		 * is reported. Counted, and printed with the next gap. */
+		dsx_discarded++;
 		goto exit;
+	}
 
 	if (IRQ_HANDLED == synaptics_filter_interrupt(data))
 		return IRQ_HANDLED;
@@ -2075,6 +2141,12 @@ static int synaptics_rmi4_int_enable(struct synaptics_rmi4_data *rmi4_data,
 	unsigned short intr_addr;
 
 	intr_mask = rmi4_data->intr_mask;
+
+	/* The only path here that stops the sensor asserting ATTN while the host keeps
+	 * its IRQ attached, which is exactly the shape /proc/interrupts showed. */
+	if (dsx_tslog)
+		printk(KERN_INFO "dsx int_enable: enable=%d caller %pS\n",
+			(int)enable, (void *)__builtin_return_address(0));
 
 	for (ii = 0; ii < rmi4_data->num_of_intr_regs; ii++) {
 		if (intr_mask[ii] != 0x00) {
@@ -2106,6 +2178,14 @@ static int synaptics_rmi4_irq_enable(struct synaptics_rmi4_data *rmi4_data,
 	int retval = 0;
 	const struct synaptics_dsx_board_data *bdata =
 			rmi4_data->hw_if->board_data;
+
+	/* enable=0,attn_only=0 frees the host IRQ (line 291 loses its action); the
+	 * attn_only branch only masks the controller. Either one is enough to stop the
+	 * counting, so name the caller. */
+	if (dsx_tslog)
+		printk(KERN_INFO "dsx irq_enable: enable=%d attn_only=%d was=%d caller %pS\n",
+			(int)enable, (int)attn_only, (int)rmi4_data->irq_enabled,
+			(void *)__builtin_return_address(0));
 
 	if (attn_only) {
 		retval = synaptics_rmi4_int_enable(rmi4_data, enable);
@@ -5612,6 +5692,12 @@ static int synaptics_rmi4_fb_notifier_cb(struct notifier_block *self,
 
 	const struct synaptics_dsx_board_data *bdata = NULL;
 
+	/* fb0 is driven by our own composer, so every blank event it produces can put the
+	 * sensor down through synaptics_rmi4_suspend() below. */
+	if (dsx_tslog)
+		printk(KERN_INFO "dsx fb: event=%lu blank=%d\n", event,
+			(evdata && evdata->data) ? *(int *)evdata->data : -999);
+
 	if (rmi4_data->hw_if->board_data)
 		bdata = rmi4_data->hw_if->board_data;
 	else
@@ -5682,6 +5768,10 @@ static int synaptics_rmi4_fb_notifier_cb_tddi(struct notifier_block *self,
 	struct synaptics_rmi4_data *rmi4_data =
 			container_of(self, struct synaptics_rmi4_data,
 			fb_notifier);
+
+	if (dsx_tslog)
+		printk(KERN_INFO "dsx fb tddi: event=%lu blank=%d\n", event,
+			(evdata && evdata->data) ? *(int *)evdata->data : -999);
 
 	if (mdss_prim_panel_is_dead())
 		return 0;
@@ -5836,6 +5926,11 @@ static int synaptics_rmi4_suspend(struct device *dev)
 	const struct synaptics_dsx_board_data *bdata =
 		rmi4_data->hw_if->board_data;
 
+	if (dsx_tslog)
+		printk(KERN_INFO "dsx: suspend, stay_awake=%d already=%d wakeup_en=%d irq_enabled=%d\n",
+			(int)rmi4_data->stay_awake, (int)rmi4_data->suspend,
+			(int)rmi4_data->wakeup_en, (int)rmi4_data->irq_enabled);
+
 	if (rmi4_data->stay_awake || rmi4_data->suspend)
 		return 0;
 
@@ -5900,6 +5995,13 @@ static int synaptics_rmi4_resume(struct device *dev)
 
 #ifdef CONFIG_FB
 	static int skip;
+
+	/* This driver drops its first resume call. If an fb blank suspended the sensor,
+	 * that first resume is the one that would bring it back, so touch stays dead
+	 * until a second unblank arrives - a silence that ends in a burst. */
+	if (dsx_tslog)
+		printk(KERN_INFO "dsx: resume, skip=%d suspend=%d wakeup_en=%d\n",
+			skip, (int)rmi4_data->suspend, (int)rmi4_data->wakeup_en);
 
 	if (skip == 0) {
 		skip = 1;
