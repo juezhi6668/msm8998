@@ -3106,7 +3106,7 @@ static long ohos_fs_emu_mount(const char *dev, const char __user *udir,
 	};
 	char *dir, *p;
 	mm_segment_t old_fs;
-	long ret;
+	long ret, vol_ret;
 	int i;
 
 	dir = strndup_user(udir, PATH_MAX);
@@ -3122,6 +3122,7 @@ static long ohos_fs_emu_mount(const char *dev, const char __user *udir,
 	set_fs(KERNEL_DS);
 	if (!strcmp(type, "sharefs")) {
 		ret = do_mount(dev, (const char __user *)dir, NULL, MS_BIND, NULL);
+		pr_info("ohos_fs_emu: sharefs %s -> %s ret %ld\n", dev, dir, ret);
 		goto out;
 	}
 
@@ -3140,6 +3141,10 @@ static long ohos_fs_emu_mount(const char *dev, const char __user *udir,
 	}
 	if (ret)
 		goto out;
+
+	/* Patch 0036: the dev/dir pair is otherwise invisible from userspace. */
+	pr_info("ohos_fs_emu: hmdfs %s -> %s\n", dev ? dev : "(none)", dir);
+
 	snprintf(p, PATH_MAX, "%s/device_view", dir);
 	sys_mkdirat(AT_FDCWD, (const char __user *)p, 0711);
 	for (i = 0; i < ARRAY_SIZE(views); i++) {
@@ -3151,6 +3156,55 @@ static long ohos_fs_emu_mount(const char *dev, const char __user *udir,
 			break;
 		}
 	}
+
+	/*
+	 * Patch 0039: the file manager browses placeholder directories that real hmdfs fills in - its
+	 * "internal storage" is a bind of /mnt/data/<user>/hmdfs and "Users" a bind of
+	 * /mnt/user/<user>/sharefs/docs. Nothing is ever mounted on them here, so the page comes up empty
+	 * and mkdir answers 13900012 / list answers 13900002. The account subtree already carries the
+	 * groups the apps hold (files: user_data_rw 1008 setgid, files/Docs: file_manager 1006 setgid),
+	 * so serving it is enough - no ownership changes. This has to happen with the hmdfs mount, before
+	 * any app sandbox bind copies the placeholder. Best effort: the return codes are logged in
+	 * vol_ret and never fail the mount the daemon asked for.
+	 */
+	if (!strcmp(type, "hmdfs") && !strncmp(dev, "/data/service/", 12) &&
+	    strlen(dir) >= 8 && !strcmp(dir + strlen(dir) - 8, "/account") &&
+	    !strncmp(dir, "/mnt/hmdfs/", 11)) {
+		static const char *const sub[] = {
+			"files", "files/Docs", "files/Docs",
+		};
+		char user[8], dst[64];
+		const char *u = dir + 11;
+		long vol;
+		int j;
+
+		j = 0;
+		while (j < 7 && u[j] && u[j] >= '0' && u[j] <= '9') {
+			user[j] = u[j];
+			j++;
+		}
+		user[j] = '\0';
+		if (j) {
+			for (vol = 0; vol < ARRAY_SIZE(sub); vol++) {
+				if (vol == 0)
+					snprintf(dst, sizeof(dst),
+						   "/mnt/data/%s/hmdfs", user);
+				else if (vol == 1)
+					snprintf(dst, sizeof(dst),
+						   "/mnt/user/%s/nosharefs/docs",
+						   user);
+				else
+					snprintf(dst, sizeof(dst),
+						   "/mnt/user/%s/sharefs/docs", user);
+				snprintf(p, PATH_MAX, "%s/%s", dev, sub[vol]);
+				sys_mkdirat(AT_FDCWD, (const char __user *)dst, 0711);
+				vol_ret = do_mount(p, (const char __user *)dst,
+						   NULL, MS_BIND, NULL);
+				pr_info("ohos_fs_emu: vol %s -> %s ret %ld\n",
+					p, dst, vol_ret);
+			}
+		}
+	}
 out:
 	set_fs(old_fs);
 	if (ret)
@@ -3158,6 +3212,111 @@ out:
 	kfree(p);
 	kfree(dir);
 	return ret;
+}
+
+/*
+ * /storage/media/<user> is the media root the media library opens files/Photo/... in. Here it is a
+ * bind of the emulated hmdfs tmpfs directory "device_view", which is not recursive, so the f2fs
+ * stacked at device_view/local does not come along and the root ends up holding one empty "local"
+ * entry - which is why no thumbnail is ever built and the gallery shows a stale buffer. Match the
+ * source by what it resolves to rather than by how it is spelled (three spelling-based attempts
+ * missed this mount entirely), print the call so the caller stops being anonymous, and bind
+ * <source>/local - the directory the user's files really are in - when it is one of our views.
+ */
+/*
+ * The docs volumes are the file manager's "internal storage". The storage daemon binds its own
+ * per-user view directory over <volume>/docs/currentUser, so that is what the app actually lists -
+ * and here the view directory is an empty tmpfs one, root:root mode 0711, so both list and mkdir
+ * answer EACCES (13900012). Serve the account Documents tree instead: it is already the mount the
+ * daemon's parent is, it is group file_manager + setgid (the app holds gid 1006), and its contents
+ * are exactly the folders the page is supposed to show.
+ */
+static char *ohos_fs_emu_docs_src(const char *dir)
+{
+	char user[8], *src;
+	const char *u;
+	int j;
+
+	if (strncmp(dir, "/mnt/user/", 10))
+		return NULL;
+	u = dir + 10;
+	j = 0;
+	while (j < 7 && u[j] >= '0' && u[j] <= '9') {
+		user[j] = u[j];
+		j++;
+	}
+	if (!j)
+		return NULL;
+	user[j] = '\0';
+
+	src = kmalloc(PATH_MAX, GFP_KERNEL);
+	if (!src)
+		return NULL;
+	snprintf(src, PATH_MAX, "/mnt/hmdfs/%s/account/merge_view/files/Docs",
+		 user);
+	pr_info("ohos_fs_emu: docs bind %s -> %s\n", src, dir);
+	return src;
+}
+
+static char *ohos_fs_emu_media_src(const char *dev, const char __user *udir,
+				   const char *type, unsigned long flags)
+{
+	static const char view[] = "device_view";
+	static const char tail[] = "/docs/currentUser";
+	struct path path;
+	char *dir, *src;
+	size_t n;
+	bool is_view = false;
+	bool media = false;
+	bool docs = false;
+
+	dir = strndup_user(udir, PATH_MAX);
+	if (IS_ERR(dir))
+		return NULL;
+	media = !strncmp(dir, "/storage/media/", 13);
+	n = strlen(dir);
+	docs = n >= sizeof(tail) - 1 &&
+		!memcmp(dir + n - (sizeof(tail) - 1), tail, sizeof(tail) - 1);
+	if (!media && !docs) {
+		kfree(dir);
+		return NULL;
+	}
+
+	pr_info("ohos_fs_emu: media mount type=%s flags=0x%lx dev=%s -> %s\n",
+		type ? type : "(null)", flags, dev ? dev : "(null)", dir);
+
+	if (docs) {
+		src = ohos_fs_emu_docs_src(dir);
+		kfree(dir);
+		return src;
+	}
+	kfree(dir);
+
+	if (!(flags & MS_BIND) || !dev || kern_path(dev, LOOKUP_FOLLOW, &path))
+		return NULL;
+	if (!strcmp(path.mnt->mnt_sb->s_type->name, "tmpfs") &&
+	    path.dentry != path.mnt->mnt_sb->s_root &&
+	    path.dentry->d_parent == path.mnt->mnt_root) {
+		spin_lock(&path.dentry->d_lock);
+		is_view = path.dentry->d_name.len == sizeof(view) - 1 &&
+			!memcmp(path.dentry->d_name.name, view, sizeof(view) - 1);
+		spin_unlock(&path.dentry->d_lock);
+	}
+	pr_info("ohos_fs_emu: media source %s resolves to %s on %s view %d\n",
+		dev, path.dentry->d_name.name, path.mnt->mnt_sb->s_type->name, is_view);
+	path_put(&path);
+	if (!is_view)
+		return NULL;
+
+	src = kmalloc(PATH_MAX, GFP_KERNEL);
+	if (!src)
+		return NULL;
+	n = strlen(dev);
+	if (n > 1 && dev[n - 1] == '/')
+		n--;
+	snprintf(src, PATH_MAX, "%.*s/local", (int)n, dev);
+	pr_info("ohos_fs_emu: media bind %s instead of %s\n", src, dev);
+	return src;
 }
 #endif
 
@@ -3188,10 +3347,18 @@ SYSCALL_DEFINE5(mount, char __user *, dev_name, char __user *, dir_name,
 	if (kernel_type && kernel_dev && !(flags & (MS_REMOUNT | MS_BIND)) &&
 	    (!strcmp(kernel_type, "hmdfs") || !strcmp(kernel_type, "sharefs")))
 		ret = ohos_fs_emu_mount(kernel_dev, dir_name, kernel_type, flags);
-	else
-#endif
+	else {
+		char *emu_src = ohos_fs_emu_media_src(kernel_dev, dir_name,
+						     kernel_type, flags);
+
+		ret = do_mount(emu_src ? emu_src : kernel_dev, dir_name,
+			       kernel_type, flags, (void *)data_page);
+		kfree(emu_src);
+	}
+#else
 		ret = do_mount(kernel_dev, dir_name, kernel_type, flags,
 			(void *) data_page);
+#endif
 
 	free_page(data_page);
 out_data:
