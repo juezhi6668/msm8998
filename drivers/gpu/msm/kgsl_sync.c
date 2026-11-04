@@ -15,11 +15,14 @@
 #include <linux/file.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sync_file.h>
 #include <linux/uaccess.h>
 
 #include <asm/current.h>
 
 #include "kgsl_sync.h"
+
+extern int kgsl_tslog;
 
 static void kgsl_sync_timeline_signal(struct sync_timeline *timeline,
 	unsigned int timestamp);
@@ -96,6 +99,9 @@ static void kgsl_fence_event_cb(struct kgsl_device *device,
 {
 	struct kgsl_fence_event_priv *ev = priv;
 	kgsl_sync_timeline_signal(ev->context->timeline, ev->timestamp);
+	if (kgsl_tslog)
+		printk(KERN_INFO "kgsl ts: FENCE ctx %d ts %u result %d\n",
+			(int) ev->context->id, ev->timestamp, result);
 	kgsl_context_put(ev->context);
 	kfree(ev);
 }
@@ -374,6 +380,65 @@ static void kgsl_sync_callback(struct sync_fence *fence,
 	kfree(kwaiter);
 }
 
+static void kgsl_sfence_callback(struct fence *fence, struct fence_cb *cb)
+{
+	struct kgsl_sync_fence_waiter *kwaiter =
+		container_of(cb, struct kgsl_sync_fence_waiter, cb);
+
+	kwaiter->func(kwaiter->priv);
+	fence_put(kwaiter->sfence);
+	kfree(kwaiter);
+}
+
+/* True when fd names a mainline sync_file. sync_file_get_fence() takes a reference we
+ * have to drop again, so callers that only want the type do not hold one. */
+bool kgsl_sync_fd_is_sync_file(int fd)
+{
+	struct fence *fence = sync_file_get_fence(fd);
+
+	if (!fence)
+		return false;
+	fence_put(fence);
+	return true;
+}
+
+/* Wait on a mainline sync_file fd. Only reached when the legacy sync_fence_fdget()
+ * above refused it, so the existing behaviour for /dev/sync fences is untouched. */
+static struct kgsl_sync_fence_waiter *
+kgsl_sync_file_async_wait(int fd, void (*func)(void *priv), void *priv)
+{
+	struct kgsl_sync_fence_waiter *kwaiter;
+	struct fence *fence;
+	int status;
+
+	fence = sync_file_get_fence(fd);
+	if (fence == NULL)
+		return ERR_PTR(-EINVAL);
+
+	/* create the waiter */
+	kwaiter = kzalloc(sizeof(*kwaiter), GFP_ATOMIC);
+	if (kwaiter == NULL) {
+		fence_put(fence);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	kwaiter->sfence = fence;
+	kwaiter->priv = priv;
+	kwaiter->func = func;
+	strlcpy(kwaiter->name, "sync_file", sizeof(kwaiter->name));
+
+	status = fence_add_callback(fence, &kwaiter->cb, kgsl_sfence_callback);
+	if (status == 0)
+		return kwaiter;
+
+	kfree(kwaiter);
+	fence_put(fence);
+	/* -ENOENT is the "already signaled" answer, which kgsl spells as a NULL handle */
+	if (status == -ENOENT)
+		return NULL;
+	return ERR_PTR(status);
+}
+
 struct kgsl_sync_fence_waiter *kgsl_sync_fence_async_wait(int fd,
 	void (*func)(void *priv), void *priv)
 {
@@ -382,8 +447,11 @@ struct kgsl_sync_fence_waiter *kgsl_sync_fence_async_wait(int fd,
 	int status;
 
 	fence = sync_fence_fdget(fd);
-	if (fence == NULL)
-		return ERR_PTR(-EINVAL);
+	if (fence == NULL) {
+		if (!kgsl_sync_fd_is_sync_file(fd))
+			return ERR_PTR(-EINVAL);
+		return kgsl_sync_file_async_wait(fd, func, priv);
+	}
 
 	/* create the waiter */
 	kwaiter = kzalloc(sizeof(*kwaiter), GFP_ATOMIC);
@@ -420,6 +488,15 @@ int kgsl_sync_fence_async_cancel(struct kgsl_sync_fence_waiter *kwaiter)
 {
 	if (kwaiter == NULL)
 		return 0;
+
+	if (kwaiter->sfence) {
+		if (fence_remove_callback(kwaiter->sfence, &kwaiter->cb)) {
+			fence_put(kwaiter->sfence);
+			kfree(kwaiter);
+			return 1;
+		}
+		return 0;
+	}
 
 	if (sync_fence_cancel_async(kwaiter->fence,
 		(struct sync_fence_waiter *) kwaiter) == 0) {

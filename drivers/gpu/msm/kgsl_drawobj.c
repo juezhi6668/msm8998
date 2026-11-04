@@ -395,7 +395,7 @@ static int drawobj_add_sync_fence(struct kgsl_device *device,
 	int ret = 0;
 
 	fence = sync_fence_fdget(sync->fd);
-	if (fence == NULL)
+	if (fence == NULL && !kgsl_sync_fd_is_sync_file(sync->fd))
 		return -EINVAL;
 
 	kref_get(&drawobj->refcount);
@@ -413,7 +413,7 @@ static int drawobj_add_sync_fence(struct kgsl_device *device,
 	spin_lock_init(&event->handle_lock);
 	set_bit(event->id, &syncobj->pending);
 
-	trace_syncpoint_fence(syncobj, fence->name);
+	trace_syncpoint_fence(syncobj, fence ? fence->name : "sync_file");
 
 	spin_lock_irqsave(&event->handle_lock, flags);
 
@@ -436,12 +436,13 @@ static int drawobj_add_sync_fence(struct kgsl_device *device,
 		 * a failure in registering the fence waiter.
 		 */
 		trace_syncpoint_fence_expire(syncobj, (ret < 0) ?
-				"error" : fence->name);
+				"error" : (fence ? fence->name : "sync_file"));
 	} else {
 		spin_unlock_irqrestore(&event->handle_lock, flags);
 	}
 
-	sync_fence_put(fence);
+	if (fence)
+		sync_fence_put(fence);
 	return ret;
 }
 

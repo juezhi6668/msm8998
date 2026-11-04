@@ -36,6 +36,10 @@ struct kgsl_sync_fence_waiter {
 	char name[32];
 	void (*func)(void *priv);
 	void *priv;
+	/* Set when the fd was a mainline sync_file instead: this tree's struct sync_fence
+	 * has no embedded struct fence, so the two kinds cannot share one waiter field. */
+	struct fence *sfence;
+	struct fence_cb cb;
 };
 
 struct kgsl_syncsource;
@@ -49,6 +53,7 @@ void kgsl_sync_timeline_destroy(struct kgsl_context *context);
 struct kgsl_sync_fence_waiter *kgsl_sync_fence_async_wait(int fd,
 	void (*func)(void *priv), void *priv);
 int kgsl_sync_fence_async_cancel(struct kgsl_sync_fence_waiter *waiter);
+bool kgsl_sync_fd_is_sync_file(int fd);
 static inline void kgsl_sync_fence_log(struct sync_fence *fence)
 {
 }
@@ -81,6 +86,11 @@ static inline int
 kgsl_sync_fence_async_cancel(struct kgsl_sync_fence_waiter *waiter)
 {
 	return 1;
+}
+
+static inline bool kgsl_sync_fd_is_sync_file(int fd)
+{
+	return false;
 }
 
 static inline void kgsl_sync_fence_log(struct sync_fence *fence)
