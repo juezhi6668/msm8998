@@ -104,3 +104,22 @@ source "drivers/staging/android/ion/Kconfig"
 endif # if ANDROID
 
 endmenu
+
+config SYNC_FILE
+	bool "mainline sync_file (backported from 4.9 for HarmonyOS fences)"
+	default y
+	select ANON_INODES
+	---help---
+	  Provides the sync_file fds that HarmonyOS userspace merges with
+	  SYNC_IOC_MERGE. Without it the composer can only hand out the legacy
+	  /dev/sync fences this kernel's MDP and kgsl create, which HOS rejects
+	  with EINVAL once per frame.
+
+config HM_SFENCE
+	bool "sync_file mint/signal helper for the HarmonyOS composer"
+	depends on SYNC_FILE
+	default y
+	---help---
+	  /dev/hm_sfence: creates userspace-signaled sync_file fds so the display
+	  composer can return a release fence HOS is able to merge, and signal it
+	  when the buffer is recyclable.

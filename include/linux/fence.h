@@ -253,6 +253,31 @@ fence_is_signaled_locked(struct fence *fence)
 	return false;
 }
 
+/*
+ * Added by the HOS display port: the 4.9 sync_file backport reports completion
+ * status, but its helper reads fence->error, a field this 4.4 core does not have.
+ * Our struct fence carries the same information in 'status' (see the enable_signaling
+ * contract above), so the two readers below map onto it instead. Without them
+ * drivers/dma-buf/sync_file.c:381 does not compile.
+ */
+static inline int fence_get_status_locked(struct fence *fence)
+{
+	if (fence_is_signaled_locked(fence))
+		return fence->status ?: 1;
+	return 0;
+}
+
+static inline int fence_get_status(struct fence *fence)
+{
+	unsigned long flags;
+	int ret;
+
+	spin_lock_irqsave(fence->lock, flags);
+	ret = fence_get_status_locked(fence);
+	spin_unlock_irqrestore(fence->lock, flags);
+	return ret;
+}
+
 /**
  * fence_is_signaled - Return an indication if the fence is signaled yet.
  * @fence:	[in]	the fence to check
