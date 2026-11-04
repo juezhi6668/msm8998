@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  *
  */
+#include <linux/module.h>
 #include <linux/firmware.h>
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/scm.h>
@@ -86,6 +87,16 @@ static int a5xx_gpmu_init(struct adreno_device *adreno_dev);
 
 #define A530_QFPROM_RAW_PTE_ROW0_MSB 0x134
 #define A530_QFPROM_RAW_PTE_ROW2_MSB 0x144
+
+/* Patch 0026: the interface hang detector counts 16-cycle ticks, so the shipped 0x3FFFF is
+ * 4.19M GPU cycles. This port holds the GPU at its 257 MHz floor (devfreq says
+ * gov=performance, min=max=710 MHz, cur=257 MHz in 110 of 119 samples), where that is only
+ * 16 ms - close enough that a merely heavy frame is treated as a wedded GPU and the recovery
+ * then retires render_service's context for good. Same default, but settable from the boot
+ * script before the GPU is first powered up, so the threshold can be A/B'ed without a rebuild.
+ */
+static unsigned int kgsl_hang_cycles = 0x3FFFF;
+module_param(kgsl_hang_cycles, uint, 0644);
 
 /* Print some key registers if a spin-for-idle times out */
 static void spin_idle_debug(struct kgsl_device *device,
@@ -1918,7 +1929,7 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 		 * (0x3FFFF*16)
 		 */
 		kgsl_regwrite(device, A5XX_RBBM_INTERFACE_HANG_INT_CNTL,
-					  (1 << 30) | 0x3FFFF);
+					  (1 << 30) | (kgsl_hang_cycles & 0x3FFFFFFF));
 	}
 
 

@@ -36,7 +36,10 @@
 #include "adreno_pm4types.h"
 #include "adreno_trace.h"
 
+extern int kgsl_tslog;
+
 #include "a3xx_reg.h"
+#include "a5xx_reg.h"
 #include "adreno_snapshot.h"
 
 /* Include the master list of GPU cores that are supported */
@@ -48,9 +51,23 @@
 #undef MODULE_PARAM_PREFIX
 #define MODULE_PARAM_PREFIX "adreno."
 
-static bool nopreempt;
+/* Patch 0028: default to no GPU preemption on this port.
+ *
+ * adreno_init() enables preemption (set_bit(ADRENO_DEVICE_PREEMPTION) below) and it is not a probe
+ * function - kgsl calls device->ftbl->init() from kgsl_open_device(), so it runs on the first open of
+ * /dev/kgsl-3d0. The ring buffer layout is built in that same call, which means the bit cannot be
+ * taken back afterwards: when probe v96 wrote 0 to the sysfs file at uptime 37s the launcher died,
+ * because _preemption_store() suspends and slumbers the GPU around a flip that the RB layout does not
+ * agree with anymore. Leaving the bit alone is the only safe option, and with it on the a5xx RB
+ * preemption stalls: every ring buffer window the hang dump printed was CP_CONTEXT_SWITCH_YIELD and
+ * CP_NOP with CP_HW_FAULT clear, no SMMU stall, and the replayed timestamp retiring in the same
+ * millisecond.
+ *
+ * Still a parameter: nopreempt=0 on the command line asks for the vendor behaviour back.
+ */
+static bool nopreempt = true;
 module_param(nopreempt, bool, 0444);
-MODULE_PARM_DESC(nopreempt, "Disable GPU preemption");
+MODULE_PARM_DESC(nopreempt, "Disable GPU preemption (default: disabled on this port)");
 
 #define DRIVER_VERSION_MAJOR   3
 #define DRIVER_VERSION_MINOR   1
@@ -561,10 +578,83 @@ void adreno_irqctrl(struct adreno_device *adreno_dev, int state)
  * @adreno_dev: Pointer to device
  * @bit: Interrupt bit
  */
+/* Patch 0025: the a5xx interface hang detector (RBBM_INT_0 bit 23) only tells us that no
+ * interface made progress for 4.19M cycles - the threshold programmed in
+ * adreno_a5xx_device_init(). Everything that says what the CP was busy with lives in registers
+ * the replay/soft reset clobbers, so read them here, in the interrupt, and dump the ring buffer
+ * words around the read pointer too.
+ *
+ * The status registers go through kgsl_regread() with the raw A5XX_ offsets: the generic
+ * adreno_readreg() runs adreno_checkreg_off() first, which calls BUG() for anything a core does
+ * not have in its offset table, and CP_HW_FAULT is not in the a5xx table. The RB/IB reads stay on
+ * adreno_readreg()/adreno_readreg64(), the same calls adreno_fault_header() makes from the
+ * dispatcher on this GPU.
+ *
+ * Gated on kgsl_tslog (patch 0020) and capped at 4 dumps per boot so the console cannot become
+ * the problem it is measuring.
+ */
+static void adreno_hang_dump(struct adreno_device *adreno_dev, int bit)
+{
+	static int left = 4;
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	struct adreno_ringbuffer *rb = adreno_dev->cur_rb;
+	unsigned int status = 0, status3 = 0, int0 = 0, hwfault = 0;
+	unsigned int rptr = 0, wptr = 0, ib1sz = 0, ib2sz = 0;
+	unsigned int *words, count, base;
+	uint64_t ib1base = 0, ib2base = 0;
+
+	if (!adreno_is_a5xx(adreno_dev) || left <= 0)
+		return;
+	left--;
+
+	kgsl_regread(device, A5XX_RBBM_STATUS, &status);
+	kgsl_regread(device, A5XX_RBBM_STATUS3, &status3);
+	kgsl_regread(device, A5XX_RBBM_INT_0_STATUS, &int0);
+	kgsl_regread(device, A5XX_CP_HW_FAULT, &hwfault);
+
+	adreno_readreg(adreno_dev, ADRENO_REG_CP_RB_RPTR, &rptr);
+	adreno_readreg(adreno_dev, ADRENO_REG_CP_RB_WPTR, &wptr);
+	adreno_readreg64(adreno_dev, ADRENO_REG_CP_IB1_BASE,
+		ADRENO_REG_CP_IB1_BASE_HI, &ib1base);
+	adreno_readreg(adreno_dev, ADRENO_REG_CP_IB1_BUFSZ, &ib1sz);
+	adreno_readreg64(adreno_dev, ADRENO_REG_CP_IB2_BASE,
+		ADRENO_REG_CP_IB2_BASE_HI, &ib2base);
+	adreno_readreg(adreno_dev, ADRENO_REG_CP_IB2_BUFSZ, &ib2sz);
+
+	pr_info("kgsl hang: bit %d status %8.8X status3 %8.8X int0 %8.8X hwfault %8.8X\n",
+		bit, status, status3, int0, hwfault);
+	pr_info("kgsl hang: rb %d rptr %X wptr %X ib1 %8.8X%8.8X/%4X ib2 %8.8X%8.8X/%4X\n",
+		rb ? rb->id : -1, rptr, wptr,
+		(unsigned int) upper_32_bits(ib1base),
+		(unsigned int) lower_32_bits(ib1base), ib1sz,
+		(unsigned int) upper_32_bits(ib2base),
+		(unsigned int) lower_32_bits(ib2base), ib2sz);
+
+	if (rb == NULL || rb->buffer_desc.hostptr == NULL)
+		return;
+	count = (unsigned int) (rb->buffer_desc.size / sizeof(unsigned int));
+	if (count < 16)
+		return;
+	words = (unsigned int *) rb->buffer_desc.hostptr;
+	base = (rptr + count - 6) % count;
+	pr_info("kgsl hang: rb before rptr: %8.8X %8.8X %8.8X %8.8X %8.8X %8.8X\n",
+		words[(base + 0) % count], words[(base + 1) % count],
+		words[(base + 2) % count], words[(base + 3) % count],
+		words[(base + 4) % count], words[(base + 5) % count]);
+	base = rptr % count;
+	pr_info("kgsl hang: rb at rptr:    %8.8X %8.8X %8.8X %8.8X %8.8X %8.8X\n",
+		words[(base + 0) % count], words[(base + 1) % count],
+		words[(base + 2) % count], words[(base + 3) % count],
+		words[(base + 4) % count], words[(base + 5) % count]);
+}
+
 void adreno_hang_int_callback(struct adreno_device *adreno_dev, int bit)
 {
 	KGSL_DRV_CRIT_RATELIMIT(KGSL_DEVICE(adreno_dev),
 			"MISC: GPU hang detected\n");
+	/* Patch 0025: read the hardware before the recovery wipes it */
+	if (kgsl_tslog)
+		adreno_hang_dump(adreno_dev, bit);
 	adreno_irqctrl(adreno_dev, 0);
 
 	/* Trigger a fault in the dispatcher - this will effect a restart */
@@ -583,6 +673,11 @@ void adreno_cp_callback(struct adreno_device *adreno_dev, int bit)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 
+	/* The only proof that the CP raised the timestamp interrupt at all;
+	 * without it a missing SWEEP is ambiguous between "GPU never finished"
+	 * and "it finished and we were never told". */
+	if (kgsl_tslog)
+		printk(KERN_INFO "kgsl ts: CP_IRQ bit %d\n", bit);
 	adreno_dispatcher_schedule(device);
 }
 
