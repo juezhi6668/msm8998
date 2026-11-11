@@ -66,5 +66,5 @@ obj-$(CONFIG_UID_SYS_STATS) += uid_sys_stats.o
 obj-y				+= qcom/
 obj-$(CONFIG_QPNP_MISC) 	+= qpnp-misc.o
 obj-$(CONFIG_MEMORY_STATE_TIME) += memory_state_time.o
-obj-y				+= vivo_lcm_sysfs.o
-obj-y				+= vivo_touchscreen_sysfs.o
+obj-$(CONFIG_VIVO_LCM_SYSFS) += vivo_lcm_sysfs.o
+obj-$(CONFIG_VIVO_TOUCHSCREEN_SYSFS) += vivo_touchscreen_sysfs.o

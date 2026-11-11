@@ -21,10 +21,24 @@
  * 它不会让 LCD 面板变成 OLED：全屏 AOD 的显示效果仍由 SurfaceFlinger 合成、
  * 由 HWC/显示驱动决定面板是否保持点亮。
  *
+ * ============================ 编译开关 ============================
+ * CONFIG_VIVO_LCM_SYSFS (drivers/misc/Kconfig, bool, depends on SYSFS,
+ * default n)。设备 defconfig 里加 CONFIG_VIVO_LCM_SYSFS=y 才会编译。
+ * 只能内建：SurfaceFlinger 在开机早期就要读 /sys/lcm/aod_disp_info。
+ *
+ * ============================ 实现结构 ============================
+ * 每个实例动态 kzalloc，内嵌 struct kobject，这样 show/store 可以用
+ * container_of(kobj, struct vlcm_inst, kobj) 取到状态，而 release 能真正
+ * kfree。ktype 直接用内核导出的 kobj_sysfs_ops——所有属性都是标准的
+ * struct kobj_attribute，不必自己写 attribute -> kobj_attribute 转发层。
+ * 属性用 sysfs_create_group() 批量挂载，失败由内核自动回滚。
+ *
  * 可调参数（/sys/module/vivo_lcm_sysfs/parameters/）：
  *   support_full_screen  默认 1；置 0 则 SurfaceFlinger 认为不支持全屏 AOD
  *   panel_name           默认 panel_boe_ili7838e（原 ROM 对应的面板名）
  */
+
+#define pr_fmt(fmt) "vlcm: " fmt
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -32,6 +46,7 @@
 #include <linux/kobject.h>
 #include <linux/sysfs.h>
 #include <linux/string.h>
+#include <linux/slab.h>
 #include <linux/mutex.h>
 #include <linux/errno.h>
 #include <linux/mm.h>
@@ -80,7 +95,7 @@ struct vlcm_inst {
 	int extra_val[VLCM_NR_EXTRA];
 };
 
-static struct vlcm_inst vlcm_insts[VLCM_NR_INST];
+static struct vlcm_inst *vlcm_insts[VLCM_NR_INST];
 
 /* 模块参数 */
 static int support_full_screen = 1;
@@ -149,14 +164,14 @@ static void vlcm_set_key(struct vlcm_inst *in, const char *key, int val)
 	} else {
 		idx = vlcm_extra_index(key);
 		if (idx < 0) {
-			pr_info("vlcm: %s: ignore unknown key '%s=%d'\n",
+			pr_info("%s: ignore unknown key '%s=%d'\n",
 				in->tag, key, val);
 			return;
 		}
 		in->extra_val[idx] = val;
 	}
 
-	pr_info("vlcm: %s: %s=%d\n", in->tag, key, val);
+	pr_info("%s: %s=%d\n", in->tag, key, val);
 }
 
 /* 解析 "key=value key=value ..."（空格/逗号/分号/换行分隔） */
@@ -175,7 +190,7 @@ static void vlcm_parse_kv(struct vlcm_inst *in, const char *buf, size_t len)
 			continue;
 		eq = strchr(tok, '=');
 		if (!eq) {
-			pr_info("vlcm: %s: ignore '%s'\n", in->tag, tok);
+			pr_info("%s: ignore '%s'\n", in->tag, tok);
 			continue;
 		}
 		*eq = '\0';
@@ -247,10 +262,14 @@ static ssize_t vlcm_extra_store(struct kobject *kobj,
 	vlcm_refresh(in);
 	mutex_unlock(&in->lock);
 
-	pr_info("vlcm: %s: %s=%d\n", in->tag, attr->attr.name, val);
+	pr_info("%s: %s=%d\n", in->tag, attr->attr.name, val);
 	return len;
 }
 
+/*
+ * 权限都是 0644 / 0444，通过 4.4 的 VERIFY_OCTAL_PERMISSIONS() 检查
+ * （它只禁止 world-writable），所以这里可以直接用标准 __ATTR()。
+ */
 #define VLCM_INT_ATTR(_fname, _field)					\
 static ssize_t _fname##_show(struct kobject *kobj,			\
 			     struct kobj_attribute *attr, char *buf)	\
@@ -272,7 +291,7 @@ static ssize_t _fname##_store(struct kobject *kobj,			\
 	in->_field = val;						\
 	vlcm_refresh(in);						\
 	mutex_unlock(&in->lock);					\
-	pr_info("vlcm: %s: %s=%d\n", in->tag, attr->attr.name, val);	\
+	pr_info("%s: %s=%d\n", in->tag, attr->attr.name, val);	\
 	return len;							\
 }									\
 static struct kobj_attribute _fname##_attr =				\
@@ -350,48 +369,47 @@ static struct attribute *vlcm_attrs[] = {
 	NULL,
 };
 
-static ssize_t vlcm_attr_show(struct kobject *kobj,
-			      struct attribute *attr, char *buf)
-{
-	struct kobj_attribute *ka =
-		container_of(attr, struct kobj_attribute, attr);
-
-	return ka->show(kobj, ka, buf);
-}
-
-static ssize_t vlcm_attr_store(struct kobject *kobj,
-			       struct attribute *attr,
-			       const char *buf, size_t len)
-{
-	struct kobj_attribute *ka =
-		container_of(attr, struct kobj_attribute, attr);
-
-	if (!ka->store)
-		return -EPERM;
-	return ka->store(kobj, ka, buf, len);
-}
-
-static const struct sysfs_ops vlcm_sysfs_ops = {
-	.show	= vlcm_attr_show,
-	.store	= vlcm_attr_store,
+static struct attribute_group vlcm_attr_group = {
+	.attrs = vlcm_attrs,
 };
 
+/* 实例是动态分配的，release 必须真正释放 */
 static void vlcm_release(struct kobject *kobj)
 {
-	/* 实例是静态分配的，无需释放 */
+	kfree(vlcm_from_kobj(kobj));
 }
 
 static struct kobj_type vlcm_ktype = {
-	.sysfs_ops	= &vlcm_sysfs_ops,
+	.sysfs_ops	= &kobj_sysfs_ops,
 	.release	= vlcm_release,
 };
+
+static void vlcm_cleanup(void)
+{
+	int i;
+
+	for (i = 0; i < VLCM_NR_INST; i++) {
+		if (!vlcm_insts[i])
+			continue;
+		sysfs_remove_group(&vlcm_insts[i]->kobj, &vlcm_attr_group);
+		kobject_put(&vlcm_insts[i]->kobj);
+		vlcm_insts[i] = NULL;
+	}
+}
 
 static int __init vlcm_init(void)
 {
 	int i, ret;
 
 	for (i = 0; i < VLCM_NR_INST; i++) {
-		struct vlcm_inst *in = &vlcm_insts[i];
+		struct vlcm_inst *in;
+
+		in = kzalloc(sizeof(*in), GFP_KERNEL);
+		if (!in) {
+			ret = -ENOMEM;
+			goto err;
+		}
+		vlcm_insts[i] = in;
 
 		mutex_init(&in->lock);
 		if (i == 0)
@@ -411,37 +429,36 @@ static int __init vlcm_init(void)
 		ret = kobject_init_and_add(&in->kobj, &vlcm_ktype, NULL,
 					   "%s", in->tag);
 		if (ret) {
-			pr_err("vlcm: failed to create /sys/%s (%d)\n",
-			       in->tag, ret);
+			pr_err("failed to create /sys/%s (%d)\n", in->tag, ret);
 			kobject_put(&in->kobj);
-			return ret;
+			vlcm_insts[i] = NULL;
+			goto err;
 		}
 
-		ret = sysfs_create_files(&in->kobj,
-					 (const struct attribute **)vlcm_attrs);
+		ret = sysfs_create_group(&in->kobj, &vlcm_attr_group);
 		if (ret) {
-			pr_err("vlcm: failed to create attrs under /sys/%s (%d)\n",
+			pr_err("failed to create attrs under /sys/%s (%d)\n",
 			       in->tag, ret);
 			kobject_put(&in->kobj);
-			return ret;
+			vlcm_insts[i] = NULL;
+			goto err;
 		}
 	}
 
-	pr_info("vlcm: vivo LCM sysfs ready: /sys/lcm, /sys/lcm1 "
+	pr_info("vivo LCM sysfs ready: /sys/lcm, /sys/lcm1 "
 		"(panel_name=%s, support_full_screen=%d)\n",
 		panel_name, support_full_screen);
 	return 0;
+
+err:
+	/* 回滚之前已经建好的实例 */
+	vlcm_cleanup();
+	return ret;
 }
 
 static void __exit vlcm_exit(void)
 {
-	int i;
-
-	for (i = 0; i < VLCM_NR_INST; i++) {
-		sysfs_remove_files(&vlcm_insts[i].kobj,
-				   (const struct attribute **)vlcm_attrs);
-		kobject_put(&vlcm_insts[i].kobj);
-	}
+	vlcm_cleanup();
 }
 
 /*

@@ -579,6 +579,40 @@ config MEMORY_STATE_TIME
 	help
 	  Memory time statistics exported to /sys/kernel/memory_state_time
 
+config VIVO_LCM_SYSFS
+	bool "vivo LCM sysfs compatibility nodes"
+	depends on SYSFS
+	default n
+	help
+	  Create /sys/lcm and /sys/lcm1 with the panel / AOD information
+	  nodes expected by OriginOS userspace. SurfaceFlinger reads
+	  /sys/lcm/aod_disp_info to decide whether full-screen AOD is
+	  supported. This driver only provides the compatibility
+	  interface; it does not change the real panel hardware.
+
+	  Behaviour can be tuned through module parameters
+	  support_full_screen and panel_name.
+
+	  This must be built-in: SurfaceFlinger reads these nodes early
+	  in boot. Say N unless you are running a ported vivo vendor image.
+
+config VIVO_TOUCHSCREEN_SYSFS
+	bool "vivo touchscreen sysfs compatibility nodes"
+	depends on SYSFS
+	default n
+	help
+	  Create /sys/touchscreen/{app_name,dclick_switch,...} compatibility
+	  nodes for ported vivo vendor ROMs, and forward the double-tap
+	  gesture bitmap (vts_gs) to the touch driver's real
+	  double_tap_enable sysfs node.
+
+	  The target node can be overridden on the kernel command line with
+	  vivo_touchscreen_sysfs.target_path=<path>.
+
+	  This must be built-in: the vivo HAL opens these nodes early in
+	  boot, before loadable modules are available. Say N unless you are
+	  running a ported vivo vendor image on this device.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
